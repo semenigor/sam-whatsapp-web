@@ -830,7 +830,6 @@ function createAppMenu() {
 function showMainWindowFromTray() {
   if (!mainWindow) {
     createMainWindow();
-  setupAutoUpdater();
     return;
   }
 
@@ -1665,6 +1664,7 @@ app.whenReady().then(() => {
     createAppMenu();
     createTray();
     createMainWindow();
+    setupAutoUpdater();
   }).catch((error) => {
     dialog.showErrorBox('Помилка ініціалізації', String(error));
   });
