@@ -1369,7 +1369,7 @@ function startMenuObserver() {
 
 const SAM_LOCAL_PINNED_CHATS_KEY = 'samLocalPinnedChatsV1';
 const SAM_LOCAL_PINNED_COLLAPSED_KEY = 'samLocalPinnedChatsCollapsedV1';
-const SAM_LOCAL_PINNED_MAX = 7;
+const SAM_LOCAL_PINNED_MAX = 15;
 
 function samPinsLoad() {
   try {
@@ -1893,6 +1893,14 @@ function samPinsEnsureStyle() {
 
 
 function samPinsEnsurePanel() {
+  try {
+    if (typeof samNotesEnsurePanel === 'function') {
+      samNotesEnsurePanel();
+    }
+  } catch (_error) {
+    // ignore
+  }
+
   samPinsEnsureStyle();
 
   let trigger = document.getElementById('samLocalPinsTrigger');
@@ -1909,7 +1917,7 @@ function samPinsEnsurePanel() {
       <span class="sam-local-pins-trigger-badge" id="samLocalPinsTriggerBadge">0/7</span>
     `;
 
-    document.documentElement.appendChild(trigger);
+    document.body.appendChild(trigger);
 
     trigger.addEventListener('click', (event) => {
       event.preventDefault();
@@ -1996,7 +2004,7 @@ function samPinsRemoveEmbeddedHostIfAny(trigger) {
   const host = document.getElementById('samLocalPinsTriggerHost');
 
   if (trigger && trigger.parentElement !== document.documentElement) {
-    document.documentElement.appendChild(trigger);
+    document.body.appendChild(trigger);
   }
 
   if (host) {
@@ -4234,6 +4242,2067 @@ if (!window.__samDrawerMiddleBorderFixScheduled) {
   setTimeout(samStartDrawerMiddleBorderFix, 0);
   setTimeout(samStartDrawerMiddleBorderFix, 800);
   setTimeout(samStartDrawerMiddleBorderFix, 2000);
+}
+
+// ===== SAM mini notes panel step 1 =====
+// Кнопка SAM 📝 під кнопкою локальних закріплених чатів.
+// Перший етап: панель, ручне додавання нотаток, копіювання, видалення.
+// Збереження поки що в localStorage; інтеграцію з повідомленнями додамо окремо.
+
+const SAM_NOTES_STORAGE_KEY = 'samMiniNotesV1';
+const SAM_NOTES_PANEL_COLLAPSED_KEY = 'samMiniNotesPanelCollapsedV1';
+
+const SAM_NOTES_TRIGGER_LEFT = 5;
+const SAM_NOTES_TRIGGER_TOP = 235;
+
+function samNotesLoad() {
+  try {
+    const raw = localStorage.getItem(SAM_NOTES_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item) => item && typeof item.text === 'string');
+    }
+  } catch (_error) {
+    // ignore
+  }
+
+  return [];
+}
+
+function samNotesSave(notes) {
+  try {
+    localStorage.setItem(SAM_NOTES_STORAGE_KEY, JSON.stringify(Array.isArray(notes) ? notes : []));
+  } catch (_error) {
+    // ignore
+  }
+}
+
+function samNotesIsPanelOpen() {
+  return localStorage.getItem(SAM_NOTES_PANEL_COLLAPSED_KEY) === '0';
+}
+
+function samNotesSetPanelOpen(open) {
+  try {
+    localStorage.setItem(SAM_NOTES_PANEL_COLLAPSED_KEY, open ? '0' : '1');
+  } catch (_error) {
+    // ignore
+  }
+}
+
+function samNotesFormatDate(iso) {
+  try {
+    const date = new Date(iso);
+
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mi = String(date.getMinutes()).padStart(2, '0');
+
+    return `${dd}.${mm} ${hh}:${mi}`;
+  } catch (_error) {
+    return '';
+  }
+}
+
+function samNotesCopyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(String(text || ''));
+      return;
+    }
+  } catch (_error) {
+    // fallback below
+  }
+
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = String(text || '');
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+  } catch (_error) {
+    // ignore
+  }
+}
+
+function samNotesEnsureStyle() {
+  if (document.getElementById('samMiniNotesStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samMiniNotesStyle';
+  style.textContent = `
+    #samMiniNotesTrigger {
+      position: fixed !important;
+      left: ${SAM_NOTES_TRIGGER_LEFT}px !important;
+      top: ${SAM_NOTES_TRIGGER_TOP}px !important;
+      width: 52px !important;
+      height: 42px !important;
+      z-index: 2147483646 !important;
+      border: 1px solid rgba(255, 255, 255, 0.18) !important;
+      border-radius: 10px !important;
+      background: rgba(32, 35, 35, 0.96) !important;
+      color: #fafafa !important;
+      font-family: "Segoe UI", Arial, sans-serif !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      line-height: 15px !important;
+      cursor: pointer !important;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      flex-direction: column !important;
+      user-select: none !important;
+      white-space: pre-line !important;
+    }
+
+    #samMiniNotesTrigger:hover {
+      background: rgba(44, 48, 48, 0.98) !important;
+      border-color: rgba(255, 255, 255, 0.32) !important;
+    }
+
+    #samMiniNotesPanel {
+      position: fixed !important;
+      left: 74px !important;
+      top: 230px !important;
+      width: 370px !important;
+      max-height: 70vh !important;
+      z-index: 2147483645 !important;
+      background: rgba(22, 23, 23, 0.98) !important;
+      color: #f5f5f5 !important;
+      border: 1px solid rgba(255, 255, 255, 0.16) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.48) !important;
+      font-family: "Segoe UI", Arial, sans-serif !important;
+      overflow: hidden !important;
+    }
+
+    #samMiniNotesPanel.sam-hidden {
+      display: none !important;
+    }
+
+    .sam-notes-header {
+      height: 38px !important;
+      padding: 0 10px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      background: rgba(32, 35, 35, 0.98) !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+      box-sizing: border-box !important;
+      font-size: 13px !important;
+      font-weight: 700 !important;
+    }
+
+    .sam-notes-close {
+      width: 26px !important;
+      height: 26px !important;
+      border: 0 !important;
+      border-radius: 7px !important;
+      background: transparent !important;
+      color: #f5f5f5 !important;
+      cursor: pointer !important;
+      font-size: 18px !important;
+      line-height: 22px !important;
+    }
+
+    .sam-notes-close:hover {
+      background: rgba(255, 255, 255, 0.10) !important;
+    }
+
+    .sam-notes-body {
+      padding: 10px !important;
+      box-sizing: border-box !important;
+    }
+
+    #samMiniNotesInput {
+      width: 100% !important;
+      height: 88px !important;
+      resize: vertical !important;
+      min-height: 70px !important;
+      max-height: 180px !important;
+      box-sizing: border-box !important;
+      border: 1px solid rgba(255, 255, 255, 0.16) !important;
+      border-radius: 8px !important;
+      background: rgba(12, 13, 13, 0.96) !important;
+      color: #f5f5f5 !important;
+      padding: 8px !important;
+      font-family: "Segoe UI", Arial, sans-serif !important;
+      font-size: 13px !important;
+      line-height: 18px !important;
+      outline: none !important;
+    }
+
+    #samMiniNotesInput:focus {
+      border-color: rgba(37, 211, 102, 0.75) !important;
+    }
+
+    .sam-notes-actions {
+      display: flex !important;
+      gap: 8px !important;
+      margin-top: 8px !important;
+    }
+
+    .sam-notes-button {
+      border: 1px solid rgba(255, 255, 255, 0.14) !important;
+      border-radius: 8px !important;
+      background: rgba(37, 211, 102, 0.18) !important;
+      color: #f5f5f5 !important;
+      cursor: pointer !important;
+      padding: 6px 9px !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      line-height: 16px !important;
+    }
+
+    .sam-notes-button:hover {
+      background: rgba(37, 211, 102, 0.28) !important;
+    }
+
+    .sam-notes-button.secondary {
+      background: rgba(255, 255, 255, 0.06) !important;
+    }
+
+    .sam-notes-button.secondary:hover {
+      background: rgba(255, 255, 255, 0.12) !important;
+    }
+
+    #samMiniNotesList {
+      margin-top: 10px !important;
+      max-height: calc(70vh - 190px) !important;
+      overflow-y: auto !important;
+      padding-right: 3px !important;
+    }
+
+    .sam-note-item {
+      border: 1px solid rgba(255, 255, 255, 0.10) !important;
+      border-radius: 9px !important;
+      background: rgba(255, 255, 255, 0.045) !important;
+      padding: 8px !important;
+      margin-bottom: 8px !important;
+      box-sizing: border-box !important;
+    }
+
+    .sam-note-meta {
+      color: rgba(245, 245, 245, 0.62) !important;
+      font-size: 11px !important;
+      line-height: 14px !important;
+      margin-bottom: 5px !important;
+    }
+
+    .sam-note-text {
+      white-space: pre-wrap !important;
+      word-break: break-word !important;
+      color: #f5f5f5 !important;
+      font-size: 12px !important;
+      line-height: 17px !important;
+      max-height: 110px !important;
+      overflow: auto !important;
+    }
+
+    .sam-note-controls {
+      display: flex !important;
+      gap: 6px !important;
+      margin-top: 7px !important;
+    }
+
+    .sam-note-small-button {
+      border: 0 !important;
+      border-radius: 7px !important;
+      background: rgba(255, 255, 255, 0.08) !important;
+      color: #f5f5f5 !important;
+      cursor: pointer !important;
+      padding: 4px 7px !important;
+      font-size: 11px !important;
+      line-height: 14px !important;
+    }
+
+    .sam-note-small-button:hover {
+      background: rgba(255, 255, 255, 0.16) !important;
+    }
+
+    .sam-note-small-button.delete:hover {
+      background: rgba(220, 53, 69, 0.40) !important;
+    }
+
+    .sam-notes-empty {
+      color: rgba(245, 245, 245, 0.52) !important;
+      font-size: 12px !important;
+      line-height: 18px !important;
+      padding: 12px 4px !important;
+      text-align: center !important;
+    }
+  `;
+
+  document.documentElement.appendChild(style);
+}
+
+function samNotesRenderList() {
+  const list = document.getElementById('samMiniNotesList');
+
+  if (!list) {
+    return;
+  }
+
+  const notes = samNotesLoad();
+
+  list.innerHTML = '';
+
+  if (!notes.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sam-notes-empty';
+    empty.textContent = 'Нотаток ще немає';
+    list.appendChild(empty);
+    return;
+  }
+
+  notes
+    .slice()
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+    .forEach((note) => {
+      const item = document.createElement('div');
+      item.className = 'sam-note-item';
+
+      const meta = document.createElement('div');
+      meta.className = 'sam-note-meta';
+      meta.textContent = samNotesFormatDate(note.createdAt) || 'Без дати';
+
+      const text = document.createElement('div');
+      text.className = 'sam-note-text';
+      text.textContent = note.text || '';
+
+      const controls = document.createElement('div');
+      controls.className = 'sam-note-controls';
+
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'sam-note-small-button';
+      copy.textContent = 'Копіювати';
+      copy.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        samNotesCopyText(note.text || '');
+      });
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'sam-note-small-button delete';
+      del.textContent = 'Видалити';
+      del.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const next = samNotesLoad().filter((item) => item.id !== note.id);
+        samNotesSave(next);
+        samNotesRenderList();
+      });
+
+      controls.appendChild(copy);
+      controls.appendChild(del);
+
+      item.appendChild(meta);
+      item.appendChild(text);
+      item.appendChild(controls);
+
+      list.appendChild(item);
+    });
+}
+
+function samNotesAddManualNote() {
+  const input = document.getElementById('samMiniNotesInput');
+
+  if (!input) {
+    return;
+  }
+
+  const text = String(input.value || '').trim();
+
+  if (!text) {
+    input.focus();
+    return;
+  }
+
+  const notes = samNotesLoad();
+
+  notes.push({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    createdAt: new Date().toISOString(),
+    source: 'manual',
+    text
+  });
+
+  samNotesSave(notes);
+  input.value = '';
+  samNotesRenderList();
+  input.focus();
+}
+
+function samNotesTogglePanel() {
+  const panel = document.getElementById('samMiniNotesPanel');
+
+  if (!panel) {
+    return;
+  }
+
+  const open = panel.classList.contains('sam-hidden');
+
+  panel.classList.toggle('sam-hidden', !open);
+  samNotesSetPanelOpen(open);
+
+  if (open) {
+    samNotesRenderList();
+
+    const input = document.getElementById('samMiniNotesInput');
+    if (input) {
+      setTimeout(() => input.focus(), 50);
+    }
+  }
+}
+
+function samNotesEnsurePanel() {
+  samNotesEnsureStyle();
+
+  if (!document.body) {
+    setTimeout(samNotesEnsurePanel, 500);
+    return;
+  }
+
+  let trigger = document.getElementById('samMiniNotesTrigger');
+
+  if (!trigger) {
+    trigger = document.createElement('button');
+    trigger.id = 'samMiniNotesTrigger';
+    trigger.type = 'button';
+    trigger.title = 'SAM-блокнот';
+    trigger.textContent = 'SAM\n📝';
+
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      samNotesTogglePanel();
+    });
+
+    document.body.appendChild(trigger);
+  }
+
+  let panel = document.getElementById('samMiniNotesPanel');
+
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'samMiniNotesPanel';
+    panel.className = samNotesIsPanelOpen() ? '' : 'sam-hidden';
+
+    const header = document.createElement('div');
+    header.className = 'sam-notes-header';
+
+    const title = document.createElement('div');
+    title.textContent = 'SAM-блокнот';
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'sam-notes-close';
+    close.textContent = '×';
+    close.title = 'Закрити';
+
+    close.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      panel.classList.add('sam-hidden');
+      samNotesSetPanelOpen(false);
+    });
+
+    header.appendChild(title);
+    header.appendChild(close);
+
+    const body = document.createElement('div');
+    body.className = 'sam-notes-body';
+
+    const input = document.createElement('textarea');
+    input.id = 'samMiniNotesInput';
+    input.placeholder = 'Введи нотатку або встав текст повідомлення...';
+
+    const actions = document.createElement('div');
+    actions.className = 'sam-notes-actions';
+
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'sam-notes-button';
+    save.textContent = 'Зберегти';
+
+    save.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      samNotesAddManualNote();
+    });
+
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'sam-notes-button secondary';
+    clear.textContent = 'Очистити';
+
+    clear.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      input.value = '';
+      input.focus();
+    });
+
+    actions.appendChild(save);
+    actions.appendChild(clear);
+
+    const list = document.createElement('div');
+    list.id = 'samMiniNotesList';
+
+    body.appendChild(input);
+    body.appendChild(actions);
+    body.appendChild(list);
+
+    panel.appendChild(header);
+    panel.appendChild(body);
+
+    document.body.appendChild(panel);
+  }
+
+  samNotesRenderList();
+}
+
+function samStartMiniNotesPanel() {
+  if (window.__samMiniNotesPanelStarted) {
+    return;
+  }
+
+  window.__samMiniNotesPanelStarted = true;
+
+  samNotesEnsurePanel();
+
+  setTimeout(samNotesEnsurePanel, 800);
+  setTimeout(samNotesEnsurePanel, 2000);
+  setInterval(samNotesEnsurePanel, 2000);
+}
+
+if (!window.__samMiniNotesPanelScheduled) {
+  window.__samMiniNotesPanelScheduled = true;
+
+  setTimeout(samStartMiniNotesPanel, 0);
+  setTimeout(samStartMiniNotesPanel, 800);
+  setTimeout(samStartMiniNotesPanel, 2000);
+}
+
+// ===== SAM save message to mini notes =====
+// Додає пункт меню повідомлення: "SAM: зберегти в блокнот".
+
+function samNotesGetCurrentChatTitleSafe() {
+  try {
+    if (typeof samPinsGetCurrentChatTitle === 'function') {
+      const title = samPinsGetCurrentChatTitle();
+
+      if (title) {
+        return String(title).trim();
+      }
+    }
+  } catch (_error) {
+    // ignore
+  }
+
+  try {
+    const header = document.querySelector('header');
+    const spans = header ? Array.from(header.querySelectorAll('span[title], span[dir="auto"]')) : [];
+
+    for (const span of spans) {
+      const value = String(span.getAttribute('title') || span.textContent || '').trim();
+
+      if (value && value.length >= 2 && value.length <= 120) {
+        return value;
+      }
+    }
+  } catch (_error) {
+    // ignore
+  }
+
+  return '';
+}
+
+function samNotesAddMessageNote(messageData) {
+  if (!messageData || !messageData.text) {
+    return false;
+  }
+
+  const text = String(messageData.text || '').trim();
+
+  if (!text) {
+    return false;
+  }
+
+  const chatTitle = samNotesGetCurrentChatTitleSafe();
+  const notes = samNotesLoad();
+
+  notes.push({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    createdAt: new Date().toISOString(),
+    source: 'message',
+    chatTitle,
+    title: chatTitle || 'WhatsApp',
+    text
+  });
+
+  samNotesSave(notes);
+
+  try {
+    samNotesRenderList();
+  } catch (_error) {
+    // ignore
+  }
+
+  return true;
+}
+
+
+function samNotesIsVisibleCopyableElement(element) {
+  if (!element || !element.getBoundingClientRect) {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+
+  if (
+    rect.width < 20 ||
+    rect.height < 10 ||
+    rect.right <= 0 ||
+    rect.bottom <= 0 ||
+    rect.left >= window.innerWidth ||
+    rect.top >= window.innerHeight
+  ) {
+    return false;
+  }
+
+  const style = window.getComputedStyle(element);
+
+  return !(
+    style.display === 'none' ||
+    style.visibility === 'hidden' ||
+    Number(style.opacity || '1') === 0
+  );
+}
+
+function samNotesChooseCopyableByPoint(copyables, point) {
+  const list = Array.from(copyables || []).filter(samNotesIsVisibleCopyableElement);
+
+  if (!list.length) {
+    return null;
+  }
+
+  if (list.length === 1) {
+    return list[0];
+  }
+
+  const scored = list.map((element) => {
+    const rect = element.getBoundingClientRect();
+
+    const x = point && Number.isFinite(point.x) ? point.x : rect.left + rect.width / 2;
+    const y = point && Number.isFinite(point.y) ? point.y : rect.top + rect.height / 2;
+
+    const contains =
+      x >= rect.left - 8 &&
+      x <= rect.right + 8 &&
+      y >= rect.top - 8 &&
+      y <= rect.bottom + 8;
+
+    const dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0;
+    const dy = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    return {
+      element,
+      contains,
+      distance,
+      area: rect.width * rect.height
+    };
+  });
+
+  scored.sort((a, b) => {
+    if (a.contains !== b.contains) {
+      return a.contains ? -1 : 1;
+    }
+
+    if (a.distance !== b.distance) {
+      return a.distance - b.distance;
+    }
+
+    return a.area - b.area;
+  });
+
+  return scored[0] ? scored[0].element : null;
+}
+
+function samNotesFindCopyableFromTarget(target, point) {
+  let element = target && target.nodeType === Node.TEXT_NODE ? target.parentElement : target;
+
+  if (!element || !element.closest) {
+    return null;
+  }
+
+  const direct = element.closest('[data-pre-plain-text]');
+
+  if (direct && samNotesIsVisibleCopyableElement(direct)) {
+    return direct;
+  }
+
+  let current = element;
+
+  for (let i = 0; i < 10 && current && current !== document.body && current !== document.documentElement; i += 1) {
+    if (current.querySelectorAll) {
+      const copyables = Array.from(current.querySelectorAll('[data-pre-plain-text]'))
+        .filter(samNotesIsVisibleCopyableElement);
+
+      if (copyables.length === 1) {
+        return copyables[0];
+      }
+
+      if (copyables.length > 1) {
+        return samNotesChooseCopyableByPoint(copyables, point);
+      }
+    }
+
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
+function samNotesRememberContextTarget(event) {
+  if (!event) {
+    return;
+  }
+
+  const point = {
+    x: event.clientX,
+    y: event.clientY,
+    time: Date.now()
+  };
+
+  window.__samNotesLastContextPoint = point;
+
+  const copyable = samNotesFindCopyableFromTarget(event.target, point);
+
+  if (copyable) {
+    window.__samNotesLastContextCopyable = copyable;
+  }
+}
+
+function samNotesGetCopyablesFromRoot(root) {
+  const result = [];
+
+  if (!root || !document.documentElement.contains(root)) {
+    return result;
+  }
+
+  if (root.matches && root.matches('[data-pre-plain-text]')) {
+    result.push(root);
+  }
+
+  if (root.querySelectorAll) {
+    result.push(...Array.from(root.querySelectorAll('[data-pre-plain-text]')));
+  }
+
+  return Array.from(new Set(result)).filter(samNotesIsVisibleCopyableElement);
+}
+
+function samNotesGetSingleCopyableForCurrentContext(root) {
+  const remembered = window.__samNotesLastContextCopyable;
+
+  if (
+    remembered &&
+    document.documentElement.contains(remembered) &&
+    samNotesIsVisibleCopyableElement(remembered)
+  ) {
+    return remembered;
+  }
+
+  const copyables = samNotesGetCopyablesFromRoot(root);
+
+  if (copyables.length === 1) {
+    return copyables[0];
+  }
+
+  if (copyables.length > 1) {
+    return samNotesChooseCopyableByPoint(copyables, window.__samNotesLastContextPoint || null);
+  }
+
+  return null;
+}
+
+function samNotesNormalizeSavedMessageText(text) {
+  return String(text || '')
+    .replace(/\u200e/g, '')
+    .replace(/\u200f/g, '')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim();
+}
+
+function samNotesBuildMessageDataFromCopyable(copyable) {
+  if (!copyable) {
+    return null;
+  }
+
+  let text = '';
+
+  try {
+    if (typeof samElementTextForClipboard === 'function') {
+      text = samElementTextForClipboard(copyable);
+    }
+  } catch (_error) {
+    text = '';
+  }
+
+  if (!text) {
+    try {
+      text = copyable.innerText || copyable.textContent || '';
+    } catch (_error) {
+      text = '';
+    }
+  }
+
+  text = samNotesNormalizeSavedMessageText(text);
+
+  if (!text) {
+    return null;
+  }
+
+  return {
+    text
+  };
+}
+
+function samNotesSaveContextMessageToNotes() {
+  let root = null;
+
+  try {
+    root =
+      state.lastContextMessageRoot ||
+      state.lastClickedMessageRoot ||
+      state.lastHoveredMessageRoot ||
+      null;
+  } catch (_error) {
+    root = null;
+  }
+
+  const copyable = samNotesGetSingleCopyableForCurrentContext(root);
+
+  if (copyable) {
+    return samNotesAddMessageNote(samNotesBuildMessageDataFromCopyable(copyable));
+  }
+
+  if (!root || !document.documentElement.contains(root)) {
+    return false;
+  }
+
+  /*
+    Захист від помилки: якщо root містить кілька повідомлень,
+    не зберігаємо його цілком, щоб не додавати пів чату в одну нотатку.
+  */
+  try {
+    const nestedCopyables = root.querySelectorAll ? root.querySelectorAll('[data-pre-plain-text]') : [];
+    const rect = root.getBoundingClientRect ? root.getBoundingClientRect() : null;
+
+    if (nestedCopyables.length > 1 || (rect && rect.height > 260)) {
+      return false;
+    }
+  } catch (_error) {
+    return false;
+  }
+
+  let messageData = null;
+
+  try {
+    if (typeof extractMessageData === 'function') {
+      messageData = extractMessageData(root);
+    }
+  } catch (_error) {
+    messageData = null;
+  }
+
+  if (!messageData || !messageData.text) {
+    try {
+      messageData = {
+        text: samNotesNormalizeSavedMessageText(root.innerText || root.textContent || '')
+      };
+    } catch (_error) {
+      messageData = null;
+    }
+  }
+
+  return samNotesAddMessageNote(messageData);
+}
+
+
+function samNotesVisibleRect(element) {
+  if (!element || !element.getBoundingClientRect) {
+    return null;
+  }
+
+  const rect = element.getBoundingClientRect();
+
+  if (
+    rect.width < 120 ||
+    rect.height < 30 ||
+    rect.right <= 0 ||
+    rect.bottom <= 0 ||
+    rect.left >= window.innerWidth ||
+    rect.top >= window.innerHeight
+  ) {
+    return null;
+  }
+
+  const style = window.getComputedStyle(element);
+
+  if (
+    style.display === 'none' ||
+    style.visibility === 'hidden' ||
+    Number(style.opacity || '1') === 0
+  ) {
+    return null;
+  }
+
+  return rect;
+}
+
+function samNotesLooksLikeOpenMessageMenu(element) {
+  const rect = samNotesVisibleRect(element);
+
+  if (!rect) {
+    return false;
+  }
+
+  if (rect.width > 520 || rect.height > 700) {
+    return false;
+  }
+
+  const text = String(element.textContent || '');
+
+  if (text.includes('SAM: зберегти в блокнот')) {
+    return true;
+  }
+
+  if (text.includes('SAM: додати до копіювання')) {
+    return true;
+  }
+
+  if (text.includes('SAM: копіювати вибрані')) {
+    return true;
+  }
+
+  const menuWords = [
+    'Відповісти',
+    'Переслати',
+    'Копіювати',
+    'Видалити',
+    'Інформація',
+    'Reply',
+    'Forward',
+    'Copy',
+    'Delete',
+    'Info'
+  ];
+
+  return menuWords.some((word) => text.includes(word));
+}
+
+function samNotesFindOpenMessageMenu() {
+  let hasContextMessage = false;
+
+  try {
+    hasContextMessage = !!(
+      state.lastContextMessageRoot ||
+      state.lastClickedMessageRoot ||
+      state.lastHoveredMessageRoot
+    );
+  } catch (_error) {
+    hasContextMessage = false;
+  }
+
+  if (!hasContextMessage) {
+    return null;
+  }
+
+  const candidates = Array.from(document.querySelectorAll(
+    '[role="menu"], ' +
+    '[role="application"], ' +
+    '[data-animate-dropdown-menu="true"], ' +
+    'div'
+  ));
+
+  const menus = candidates
+    .filter(samNotesLooksLikeOpenMessageMenu)
+    .sort((a, b) => {
+      const ar = a.getBoundingClientRect();
+      const br = b.getBoundingClientRect();
+
+      const az = Number(window.getComputedStyle(a).zIndex || '0') || 0;
+      const bz = Number(window.getComputedStyle(b).zIndex || '0') || 0;
+
+      if (az !== bz) {
+        return bz - az;
+      }
+
+      return (ar.width * ar.height) - (br.width * br.height);
+    });
+
+  return menus[0] || null;
+}
+
+function samNotesCreateSaveMenuItem() {
+  const item = document.createElement('div');
+  item.className = 'sam-notes-save-menu-item';
+  item.setAttribute('role', 'button');
+  item.setAttribute('tabindex', '0');
+  item.textContent = 'SAM: зберегти в блокнот';
+
+  item.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const ok = samNotesSaveContextMessageToNotes();
+
+    if (!ok) {
+      try {
+        if (typeof showToast === 'function') {
+          showToast('Не вдалося зберегти повідомлення');
+        }
+      } catch (_error) {
+        // ignore
+      }
+    }
+
+    const menu = item.closest('[role="menu"], [role="application"]');
+
+    if (menu) {
+      try {
+        menu.remove();
+      } catch (_error) {
+        // ignore
+      }
+    }
+  });
+
+  return item;
+}
+
+function samNotesEnsureSaveMenuStyle() {
+  if (document.getElementById('samNotesSaveMenuStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samNotesSaveMenuStyle';
+  style.textContent = `
+    .sam-notes-save-menu-item {
+      min-height: 36px !important;
+      padding: 9px 18px !important;
+      box-sizing: border-box !important;
+      cursor: pointer !important;
+      color: #e9edef !important;
+      background: rgba(37, 211, 102, 0.12) !important;
+      font-family: "Segoe UI", Arial, sans-serif !important;
+      font-size: 14px !important;
+      line-height: 18px !important;
+      white-space: nowrap !important;
+      user-select: none !important;
+    }
+
+    .sam-notes-save-menu-item:hover {
+      background: rgba(37, 211, 102, 0.24) !important;
+    }
+  `;
+
+  document.documentElement.appendChild(style);
+}
+
+function samNotesPatchOpenMessageMenuOnce() {
+  samNotesEnsureSaveMenuStyle();
+
+  const menu = samNotesFindOpenMessageMenu();
+
+  if (!menu) {
+    return;
+  }
+
+  if (menu.querySelector('.sam-notes-save-menu-item')) {
+    return;
+  }
+
+  const item = samNotesCreateSaveMenuItem();
+  menu.appendChild(item);
+}
+
+function samStartNotesMessageMenuPatch() {
+  if (window.__samNotesMessageMenuPatchStarted) {
+    return;
+  }
+
+  window.__samNotesMessageMenuPatchStarted = true;
+
+  const run = () => {
+    try {
+      samNotesPatchOpenMessageMenuOnce();
+    } catch (_error) {
+      // ignore
+    }
+  };
+
+  document.addEventListener('contextmenu', (event) => {
+    samNotesRememberContextTarget(event);
+    setTimeout(run, 80);
+    setTimeout(run, 250);
+    setTimeout(run, 600);
+  }, true);
+
+  document.addEventListener('pointerdown', (event) => {
+    samNotesRememberContextTarget(event);
+  }, true);
+
+  document.addEventListener('click', (event) => {
+    samNotesRememberContextTarget(event);
+    setTimeout(run, 80);
+    setTimeout(run, 250);
+  }, true);
+
+  if (document.body) {
+    let timer = null;
+
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(run, 80);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  setInterval(run, 1200);
+}
+
+if (!window.__samNotesMessageMenuPatchScheduled) {
+  window.__samNotesMessageMenuPatchScheduled = true;
+
+  setTimeout(samStartNotesMessageMenuPatch, 0);
+  setTimeout(samStartNotesMessageMenuPatch, 800);
+  setTimeout(samStartNotesMessageMenuPatch, 2000);
+}
+
+// ===== SAM save selected messages to mini notes =====
+// Додає кнопку "Зберегти в блокнот" у нижню панель вибору кількох повідомлень.
+
+function samNotesGetSelectedMessagesText() {
+  let items = [];
+
+  try {
+    if (!state || !state.selected || typeof state.selected.values !== 'function') {
+      return '';
+    }
+
+    items = Array.from(state.selected.values());
+  } catch (_error) {
+    return '';
+  }
+
+  if (!items.length) {
+    return '';
+  }
+
+  const chunks = [];
+
+  for (const item of items) {
+    let text = '';
+
+    try {
+      if (item && item.text) {
+        text = String(item.text || '').trim();
+      }
+    } catch (_error) {
+      text = '';
+    }
+
+    if (!text && item && item.element) {
+      try {
+        const copyable =
+          item.element.matches && item.element.matches('[data-pre-plain-text]')
+            ? item.element
+            : item.element.querySelector
+              ? item.element.querySelector('[data-pre-plain-text]')
+              : null;
+
+        if (copyable && typeof samElementTextForClipboard === 'function') {
+          text = samElementTextForClipboard(copyable);
+        } else {
+          text = item.element.innerText || item.element.textContent || '';
+        }
+      } catch (_error) {
+        text = '';
+      }
+    }
+
+    text = String(text || '')
+      .replace(/\u200e/g, '')
+      .replace(/\u200f/g, '')
+      .trim();
+
+    if (text) {
+      chunks.push(text);
+    }
+  }
+
+  return chunks.join('\n\n').trim();
+}
+
+function samNotesSaveSelectedMessagesToNotes() {
+  const text = samNotesGetSelectedMessagesText();
+
+  if (!text) {
+    try {
+      if (typeof showToast === 'function') {
+        showToast('Немає вибраних повідомлень');
+      }
+    } catch (_error) {
+      // ignore
+    }
+
+    return false;
+  }
+
+  const chatTitle = samNotesGetCurrentChatTitleSafe();
+  const notes = samNotesLoad();
+
+  notes.push({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    createdAt: new Date().toISOString(),
+    source: 'selected-messages',
+    chatTitle,
+    title: chatTitle || 'WhatsApp',
+    text
+  });
+
+  samNotesSave(notes);
+
+  try {
+    samNotesRenderList();
+  } catch (_error) {
+    // ignore
+  }
+
+  try {
+    if (typeof showToast === 'function') {
+      showToast('Вибрані повідомлення збережено в SAM-блокнот');
+    }
+  } catch (_error) {
+    // ignore
+  }
+
+  try {
+    if (typeof samClearSelectedMessagesAfterSamAction === 'function') {
+      samClearSelectedMessagesAfterSamAction(180);
+    }
+  } catch (_error) {
+    // ignore
+  }
+
+  return true;
+}
+
+function samNotesEnsureSelectionBarButtonStyle() {
+  if (document.getElementById('samNotesSelectionBarButtonStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samNotesSelectionBarButtonStyle';
+  style.textContent = `
+    .sam-notes-selection-save-button {
+      border: 1px solid rgba(255, 255, 255, 0.16) !important;
+      border-radius: 8px !important;
+      background: rgba(37, 211, 102, 0.20) !important;
+      color: #f5f5f5 !important;
+      cursor: pointer !important;
+      padding: 7px 10px !important;
+      font-family: "Segoe UI", Arial, sans-serif !important;
+      font-size: 12px !important;
+      font-weight: 700 !important;
+      line-height: 16px !important;
+      white-space: nowrap !important;
+      user-select: none !important;
+      margin-left: 8px !important;
+    }
+
+    .sam-notes-selection-save-button:hover {
+      background: rgba(37, 211, 102, 0.32) !important;
+    }
+  `;
+
+  document.documentElement.appendChild(style);
+}
+
+function samNotesEnsureSelectionBarButton() {
+  samNotesEnsureSelectionBarButtonStyle();
+
+  let bar = null;
+
+  try {
+    bar = state && state.bar ? state.bar : null;
+  } catch (_error) {
+    bar = null;
+  }
+
+  if (!bar || !document.documentElement.contains(bar)) {
+    return;
+  }
+
+  if (bar.querySelector('.sam-notes-selection-save-button')) {
+    return;
+  }
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'sam-notes-selection-save-button';
+  button.textContent = 'Зберегти в блокнот';
+  button.title = 'Зберегти вибрані повідомлення в SAM-блокнот';
+
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    samNotesSaveSelectedMessagesToNotes();
+  });
+
+  bar.appendChild(button);
+}
+
+function samStartNotesSelectionBarButton() {
+  if (window.__samNotesSelectionBarButtonStarted) {
+    return;
+  }
+
+  window.__samNotesSelectionBarButtonStarted = true;
+
+  const run = () => {
+    try {
+      samNotesEnsureSelectionBarButton();
+    } catch (_error) {
+      // ignore
+    }
+  };
+
+  run();
+  setTimeout(run, 300);
+  setTimeout(run, 1000);
+  setInterval(run, 1000);
+
+  if (document.body) {
+    let timer = null;
+
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(run, 80);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+}
+
+if (!window.__samNotesSelectionBarButtonScheduled) {
+  window.__samNotesSelectionBarButtonScheduled = true;
+
+  setTimeout(samStartNotesSelectionBarButton, 0);
+  setTimeout(samStartNotesSelectionBarButton, 800);
+  setTimeout(samStartNotesSelectionBarButton, 2000);
+}
+
+// ===== SAM auto clear selected messages after actions =====
+// Після копіювання вибраних або збереження вибраних у блокнот автоматично знімає вибір.
+
+function samClearSelectedMessagesAfterSamAction(delayMs = 250) {
+  setTimeout(() => {
+    try {
+      if (typeof setSelectionMode === 'function') {
+        setSelectionMode(false);
+        return;
+      }
+    } catch (_error) {
+      // fallback below
+    }
+
+    try {
+      if (state && state.selected && typeof state.selected.values === 'function') {
+        for (const item of state.selected.values()) {
+          if (item && item.element && item.element.classList) {
+            item.element.classList.remove('sam-wa-selected-message');
+          }
+        }
+
+        state.selected.clear();
+      }
+
+      if (state && state.bar && state.bar.remove) {
+        state.bar.remove();
+        state.bar = null;
+      }
+    } catch (_error) {
+      // ignore
+    }
+  }, delayMs);
+}
+
+function samStartAutoClearAfterCopySelected() {
+  if (window.__samAutoClearAfterCopySelectedStarted) {
+    return;
+  }
+
+  window.__samAutoClearAfterCopySelectedStarted = true;
+
+  document.addEventListener('click', (event) => {
+    try {
+      const target = event.target && event.target.closest
+        ? event.target.closest('button, [role="button"], [role="menuitem"], div')
+        : null;
+
+      if (!target) {
+        return;
+      }
+
+      const text = String(target.textContent || '').replace(/\s+/g, ' ').trim();
+
+      if (
+        text.includes('SAM: копіювати вибрані') ||
+        text === 'Копіювати вибрані' ||
+        text.includes('Копіювати вибрані')
+      ) {
+        samClearSelectedMessagesAfterSamAction(700);
+      }
+    } catch (_error) {
+      // ignore
+    }
+  }, true);
+}
+
+if (!window.__samAutoClearAfterCopySelectedScheduled) {
+  window.__samAutoClearAfterCopySelectedScheduled = true;
+
+  setTimeout(samStartAutoClearAfterCopySelected, 0);
+  setTimeout(samStartAutoClearAfterCopySelected, 800);
+  setTimeout(samStartAutoClearAfterCopySelected, 2000);
+}
+
+// ===== SAM mini notes features: search, clear, file storage, export, insert =====
+// Доробки блокнота:
+// 2. пошук;
+// 3. очистити всі;
+// 4. файл sam_notes.json через main IPC;
+// 5. експорт .txt;
+// 6. вставити нотатку в поточний чат.
+
+function samNotesNormalizeNoteItem(note) {
+  return {
+    id: String(note && note.id ? note.id : `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+    createdAt: String(note && note.createdAt ? note.createdAt : new Date().toISOString()),
+    source: String(note && note.source ? note.source : 'manual'),
+    chatTitle: String(note && note.chatTitle ? note.chatTitle : ''),
+    title: String(note && note.title ? note.title : note && note.chatTitle ? note.chatTitle : ''),
+    text: String(note && note.text ? note.text : '')
+  };
+}
+
+function samNotesNormalizeList(notes) {
+  if (!Array.isArray(notes)) {
+    return [];
+  }
+
+  return notes
+    .filter((note) => note && typeof note.text === 'string')
+    .map(samNotesNormalizeNoteItem);
+}
+
+function samNotesLoadFromLocalStorageBackup() {
+  try {
+    const raw = localStorage.getItem(SAM_NOTES_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+
+    return samNotesNormalizeList(parsed);
+  } catch (_error) {
+    return [];
+  }
+}
+
+if (!Array.isArray(window.__samNotesCache)) {
+  window.__samNotesCache = samNotesLoadFromLocalStorageBackup();
+}
+
+if (typeof window.__samNotesFileLoaded !== 'boolean') {
+  window.__samNotesFileLoaded = false;
+}
+
+if (typeof window.__samNotesDirtyBeforeFileLoad !== 'boolean') {
+  window.__samNotesDirtyBeforeFileLoad = false;
+}
+
+async function samNotesLoadFromFileOnce() {
+  if (window.__samNotesFileLoaded || window.__samNotesFileLoading) {
+    return;
+  }
+
+  window.__samNotesFileLoading = true;
+
+  try {
+    if (!ipcRenderer || !ipcRenderer.invoke) {
+      return;
+    }
+
+    const fileNotes = samNotesNormalizeList(await ipcRenderer.invoke('notes:load'));
+    const localNotes = samNotesLoadFromLocalStorageBackup();
+
+    if (window.__samNotesDirtyBeforeFileLoad) {
+      await ipcRenderer.invoke('notes:save', {
+        notes: window.__samNotesCache
+      });
+    } else if (fileNotes.length > 0) {
+      window.__samNotesCache = fileNotes;
+    } else if (localNotes.length > 0) {
+      window.__samNotesCache = localNotes;
+
+      await ipcRenderer.invoke('notes:save', {
+        notes: window.__samNotesCache
+      });
+    } else {
+      window.__samNotesCache = [];
+    }
+
+    window.__samNotesFileLoaded = true;
+
+    try {
+      samNotesRenderList();
+    } catch (_error) {
+      // ignore
+    }
+  } catch (_error) {
+    // localStorage fallback remains active
+  } finally {
+    window.__samNotesFileLoading = false;
+  }
+}
+
+function samNotesLoad() {
+  if (!Array.isArray(window.__samNotesCache)) {
+    window.__samNotesCache = samNotesLoadFromLocalStorageBackup();
+  }
+
+  samNotesLoadFromFileOnce();
+
+  return samNotesNormalizeList(window.__samNotesCache);
+}
+
+function samNotesSave(notes) {
+  const normalized = samNotesNormalizeList(notes);
+  window.__samNotesCache = normalized;
+
+  try {
+    localStorage.setItem(SAM_NOTES_STORAGE_KEY, JSON.stringify(normalized));
+  } catch (_error) {
+    // ignore
+  }
+
+  if (!window.__samNotesFileLoaded) {
+    window.__samNotesDirtyBeforeFileLoad = true;
+  }
+
+  try {
+    if (ipcRenderer && ipcRenderer.invoke) {
+      ipcRenderer.invoke('notes:save', {
+        notes: normalized
+      }).catch(() => {});
+    }
+  } catch (_error) {
+    // ignore
+  }
+}
+
+function samNotesEnsureFeatureStyle() {
+  if (document.getElementById('samMiniNotesFeatureStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samMiniNotesFeatureStyle';
+  style.textContent = `
+    .sam-notes-extra-actions {
+      display: flex !important;
+      gap: 8px !important;
+      margin-top: 8px !important;
+    }
+
+    .sam-notes-search-wrap {
+      margin-top: 10px !important;
+    }
+
+    #samMiniNotesSearch {
+      width: 100% !important;
+      height: 32px !important;
+      box-sizing: border-box !important;
+      border: 1px solid rgba(255, 255, 255, 0.16) !important;
+      border-radius: 8px !important;
+      background: rgba(12, 13, 13, 0.96) !important;
+      color: #f5f5f5 !important;
+      padding: 6px 8px !important;
+      font-family: "Segoe UI", Arial, sans-serif !important;
+      font-size: 12px !important;
+      line-height: 16px !important;
+      outline: none !important;
+    }
+
+    #samMiniNotesSearch:focus {
+      border-color: rgba(37, 211, 102, 0.75) !important;
+    }
+
+    .sam-note-meta-chat {
+      color: rgba(37, 211, 102, 0.88) !important;
+      font-weight: 700 !important;
+    }
+
+    .sam-note-small-button.insert {
+      background: rgba(37, 211, 102, 0.15) !important;
+    }
+
+    .sam-note-small-button.insert:hover {
+      background: rgba(37, 211, 102, 0.28) !important;
+    }
+
+    .sam-notes-button.danger {
+      background: rgba(220, 53, 69, 0.20) !important;
+    }
+
+    .sam-notes-button.danger:hover {
+      background: rgba(220, 53, 69, 0.36) !important;
+    }
+  `;
+
+  document.documentElement.appendChild(style);
+}
+
+function samNotesEnsureExtraControls() {
+  samNotesEnsureFeatureStyle();
+
+  const list = document.getElementById('samMiniNotesList');
+  const input = document.getElementById('samMiniNotesInput');
+
+  if (!list || !input || !input.parentElement) {
+    return;
+  }
+
+  const body = input.parentElement;
+  const actions = body.querySelector('.sam-notes-actions');
+
+  if (actions && !document.getElementById('samMiniNotesExtraActions')) {
+    const extra = document.createElement('div');
+    extra.id = 'samMiniNotesExtraActions';
+    extra.className = 'sam-notes-extra-actions';
+
+    const exportButton = document.createElement('button');
+    exportButton.type = 'button';
+    exportButton.className = 'sam-notes-button secondary';
+    exportButton.textContent = 'Експорт .txt';
+    exportButton.title = 'Експортувати всі нотатки у текстовий файл';
+
+    exportButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      samNotesExportToTxt();
+    });
+
+    const clearAll = document.createElement('button');
+    clearAll.type = 'button';
+    clearAll.className = 'sam-notes-button danger';
+    clearAll.textContent = 'Очистити всі';
+    clearAll.title = 'Видалити всі нотатки';
+
+    clearAll.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      samNotesClearAllNotes();
+    });
+
+    extra.appendChild(exportButton);
+    extra.appendChild(clearAll);
+
+    actions.insertAdjacentElement('afterend', extra);
+  }
+
+  if (!document.getElementById('samMiniNotesSearch')) {
+    const wrap = document.createElement('div');
+    wrap.className = 'sam-notes-search-wrap';
+
+    const search = document.createElement('input');
+    search.id = 'samMiniNotesSearch';
+    search.type = 'search';
+    search.placeholder = 'Пошук по нотатках...';
+
+    search.addEventListener('input', () => {
+      samNotesRenderList();
+    });
+
+    wrap.appendChild(search);
+    body.insertBefore(wrap, list);
+  }
+}
+
+function samNotesGetSearchQuery() {
+  const search = document.getElementById('samMiniNotesSearch');
+
+  return String(search && search.value ? search.value : '')
+    .trim()
+    .toLowerCase();
+}
+
+function samNotesMatchesSearch(note, query) {
+  if (!query) {
+    return true;
+  }
+
+  const haystack = [
+    note.text || '',
+    note.chatTitle || '',
+    note.title || '',
+    note.source || '',
+    samNotesFormatDate(note.createdAt) || ''
+  ].join(' ').toLowerCase();
+
+  return haystack.includes(query);
+}
+
+function samNotesFindCurrentChatInput() {
+  const selectors = [
+    'footer [contenteditable="true"][role="textbox"]',
+    'footer [contenteditable="true"][data-tab]',
+    'footer div[contenteditable="true"]',
+    'div[contenteditable="true"][role="textbox"][data-tab]',
+    'div[contenteditable="true"][role="textbox"]'
+  ];
+
+  for (const selector of selectors) {
+    const candidates = Array.from(document.querySelectorAll(selector));
+
+    for (const candidate of candidates) {
+      try {
+        const rect = candidate.getBoundingClientRect();
+        const style = window.getComputedStyle(candidate);
+
+        if (
+          rect.width > 80 &&
+          rect.height > 18 &&
+          rect.right > 0 &&
+          rect.bottom > 0 &&
+          rect.left < window.innerWidth &&
+          rect.top < window.innerHeight &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden'
+        ) {
+          return candidate;
+        }
+      } catch (_error) {
+        // ignore
+      }
+    }
+  }
+
+  return null;
+}
+
+
+function samNotesPlaceCaretAtEnd(element) {
+  try {
+    element.focus();
+
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function samNotesInsertPlainTextIntoEditableDirect(element, text) {
+  const value = String(text || '');
+
+  if (!element || !value) {
+    return false;
+  }
+
+  try {
+    element.focus();
+
+    const selection = window.getSelection();
+
+    if (
+      !selection ||
+      !selection.rangeCount ||
+      !element.contains(selection.anchorNode)
+    ) {
+      samNotesPlaceCaretAtEnd(element);
+    }
+
+    const ok = document.execCommand('insertText', false, value);
+
+    element.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      composed: true,
+      inputType: 'insertText',
+      data: value
+    }));
+
+    return ok;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function samNotesInsertTextIntoCurrentChat(text) {
+  const value = String(text || '');
+
+  if (!value.trim()) {
+    return false;
+  }
+
+  const input = samNotesFindCurrentChatInput();
+
+  if (!input) {
+    try {
+      if (typeof showToast === 'function') {
+        showToast('Не знайдено поле введення чату');
+      }
+    } catch (_error) {
+      // ignore
+    }
+
+    return false;
+  }
+
+  const ok = samNotesInsertPlainTextIntoEditableDirect(input, value);
+
+  if (ok) {
+    try {
+      if (typeof showToast === 'function') {
+        showToast('Нотатку вставлено в чат');
+      }
+    } catch (_error) {
+      // ignore
+    }
+  } else {
+    try {
+      if (typeof showToast === 'function') {
+        showToast('Не вдалося вставити нотатку в чат');
+      }
+    } catch (_error) {
+      // ignore
+    }
+  }
+
+  return ok;
+}
+
+
+async function samNotesExportToTxt() {
+  const notes = samNotesLoad();
+
+  try {
+    if (!ipcRenderer || !ipcRenderer.invoke) {
+      return;
+    }
+
+    const result = await ipcRenderer.invoke('notes:export', {
+      notes
+    });
+
+    if (result && result.ok) {
+      try {
+        if (typeof showToast === 'function') {
+          showToast('SAM-блокнот експортовано');
+        }
+      } catch (_error) {
+        // ignore
+      }
+    }
+  } catch (_error) {
+    try {
+      if (typeof showToast === 'function') {
+        showToast('Не вдалося експортувати SAM-блокнот');
+      }
+    } catch (__error) {
+      // ignore
+    }
+  }
+}
+
+function samNotesClearAllNotes() {
+  const notes = samNotesLoad();
+
+  if (!notes.length) {
+    return;
+  }
+
+  const ok = window.confirm('Очистити всі нотатки SAM-блокнота?');
+
+  if (!ok) {
+    return;
+  }
+
+  samNotesSave([]);
+  samNotesRenderList();
+}
+
+function samNotesRenderList() {
+  samNotesEnsureExtraControls();
+
+  const list = document.getElementById('samMiniNotesList');
+
+  if (!list) {
+    return;
+  }
+
+  const notes = samNotesLoad();
+  const query = samNotesGetSearchQuery();
+
+  const filtered = notes
+    .filter((note) => samNotesMatchesSearch(note, query))
+    .slice()
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+
+  list.innerHTML = '';
+
+  if (!filtered.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sam-notes-empty';
+    empty.textContent = query ? 'Нотаток не знайдено' : 'Нотаток ще немає';
+    list.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach((note) => {
+    const item = document.createElement('div');
+    item.className = 'sam-note-item';
+
+    const meta = document.createElement('div');
+    meta.className = 'sam-note-meta';
+
+    const dateText = samNotesFormatDate(note.createdAt) || 'Без дати';
+    const chatText = String(note.chatTitle || note.title || '').trim();
+
+    if (chatText) {
+      const chat = document.createElement('span');
+      chat.className = 'sam-note-meta-chat';
+      chat.textContent = chatText;
+
+      meta.appendChild(document.createTextNode(`${dateText} | `));
+      meta.appendChild(chat);
+    } else {
+      meta.textContent = dateText;
+    }
+
+    const text = document.createElement('div');
+    text.className = 'sam-note-text';
+    text.textContent = note.text || '';
+
+    const controls = document.createElement('div');
+    controls.className = 'sam-note-controls';
+
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'sam-note-small-button';
+    copy.textContent = 'Копіювати';
+    copy.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      samNotesCopyText(note.text || '');
+    });
+
+    const insert = document.createElement('button');
+    insert.type = 'button';
+    insert.className = 'sam-note-small-button insert';
+    insert.textContent = 'Вставити в чат';
+    insert.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      samNotesInsertTextIntoCurrentChat(note.text || '');
+    });
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'sam-note-small-button delete';
+    del.textContent = 'Видалити';
+    del.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const next = samNotesLoad().filter((item) => item.id !== note.id);
+      samNotesSave(next);
+      samNotesRenderList();
+    });
+
+    controls.appendChild(copy);
+    controls.appendChild(insert);
+    controls.appendChild(del);
+
+    item.appendChild(meta);
+    item.appendChild(text);
+    item.appendChild(controls);
+
+    list.appendChild(item);
+  });
+}
+
+function samStartNotesFileStorageAndFeatures() {
+  if (window.__samNotesFileStorageAndFeaturesStarted) {
+    return;
+  }
+
+  window.__samNotesFileStorageAndFeaturesStarted = true;
+
+  setTimeout(samNotesLoadFromFileOnce, 0);
+  setTimeout(samNotesLoadFromFileOnce, 500);
+  setTimeout(samNotesLoadFromFileOnce, 1500);
+
+  setTimeout(() => {
+    try {
+      samNotesEnsureExtraControls();
+      samNotesRenderList();
+    } catch (_error) {
+      // ignore
+    }
+  }, 500);
+}
+
+if (!window.__samNotesFileStorageAndFeaturesScheduled) {
+  window.__samNotesFileStorageAndFeaturesScheduled = true;
+
+  setTimeout(samStartNotesFileStorageAndFeatures, 0);
+  setTimeout(samStartNotesFileStorageAndFeatures, 800);
+  setTimeout(samStartNotesFileStorageAndFeatures, 2000);
 }
 
 async function samRefreshUiScaleMode() {

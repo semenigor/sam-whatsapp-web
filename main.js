@@ -1566,6 +1566,146 @@ if (!gotLock) {
   });
 
   
+function getSamNotesFilePath() {
+  return path.join(app.getPath('userData'), 'sam_notes.json');
+}
+
+function normalizeSamNotesForFile(notes) {
+  if (!Array.isArray(notes)) {
+    return [];
+  }
+
+  return notes
+    .filter((note) => note && typeof note.text === 'string')
+    .map((note) => ({
+      id: String(note.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+      createdAt: String(note.createdAt || new Date().toISOString()),
+      source: String(note.source || 'manual'),
+      chatTitle: String(note.chatTitle || ''),
+      title: String(note.title || note.chatTitle || ''),
+      text: String(note.text || '')
+    }));
+}
+
+function readSamNotesFromFile() {
+  const filePath = getSamNotesFilePath();
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      return [];
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = raw ? JSON.parse(raw) : [];
+
+    return normalizeSamNotesForFile(parsed);
+  } catch (error) {
+    electronLog.warn('Failed to read SAM notes file', error);
+    return [];
+  }
+}
+
+function writeSamNotesToFile(notes) {
+  const filePath = getSamNotesFilePath();
+  const normalized = normalizeSamNotesForFile(notes);
+
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(normalized, null, 2) + '\n', 'utf8');
+
+  return normalized;
+}
+
+function formatSamNotesExportDate(value) {
+  try {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(date.getFullYear());
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mi = String(date.getMinutes()).padStart(2, '0');
+
+    return `${dd}.${mm}.${yyyy} ${hh}:${mi}`;
+  } catch (_error) {
+    return '';
+  }
+}
+
+function buildSamNotesExportText(notes) {
+  const normalized = normalizeSamNotesForFile(notes);
+
+  if (!normalized.length) {
+    return 'SAM-блокнот\n\nНотаток немає.\n';
+  }
+
+  const lines = ['SAM-блокнот', ''];
+
+  normalized
+    .slice()
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+    .forEach((note, index) => {
+      lines.push(`=== ${index + 1}. ${formatSamNotesExportDate(note.createdAt) || 'Без дати'} ===`);
+
+      if (note.chatTitle) {
+        lines.push(`Чат: ${note.chatTitle}`);
+      }
+
+      if (note.source) {
+        lines.push(`Джерело: ${note.source}`);
+      }
+
+      lines.push('');
+      lines.push(note.text || '');
+      lines.push('');
+    });
+
+  return lines.join('\n');
+}
+
+function registerNotesIpcHandlers() {
+  ipcMain.handle('notes:load', async () => {
+    return readSamNotesFromFile();
+  });
+
+  ipcMain.handle('notes:save', async (_event, payload) => {
+    const notes = payload && Array.isArray(payload.notes) ? payload.notes : [];
+    return writeSamNotesToFile(notes);
+  });
+
+  ipcMain.handle('notes:export', async (_event, payload) => {
+    const notes = payload && Array.isArray(payload.notes) ? payload.notes : readSamNotesFromFile();
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const defaultPath = path.join(app.getPath('documents'), `SAM-блокнот-${stamp}.txt`);
+
+    const result = await dialog.showSaveDialog({
+      title: 'Експорт SAM-блокнота',
+      defaultPath,
+      filters: [
+        { name: 'Text files', extensions: ['txt'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    });
+
+    if (result.canceled || !result.filePath) {
+      return {
+        ok: false,
+        canceled: true
+      };
+    }
+
+    fs.writeFileSync(result.filePath, buildSamNotesExportText(notes), 'utf8');
+
+    return {
+      ok: true,
+      filePath: result.filePath
+    };
+  });
+}
+
 function setupAutoUpdater() {
   if (!app.isPackaged) {
     return;
@@ -1660,6 +1800,7 @@ app.whenReady().then(() => {
     configureSession();
     registerSettingsIpcHandlers();
     registerMessageCopyIpcHandlers();
+  registerNotesIpcHandlers();
     registerPreviewIpcHandlers();
     createAppMenu();
     createTray();
