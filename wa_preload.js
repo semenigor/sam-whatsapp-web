@@ -3369,6 +3369,873 @@ function samEnsureCompactViewStyle() {
 }
 
 
+function samEnsureChatListPolishStyle() {
+  if (document.getElementById('samChatListPolishStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samChatListPolishStyle';
+  style.textContent = `
+    /*
+      SAM UI polish:
+      1. природніша висота рядків у списку чатів;
+      2. повністю невидимий splitter-hit-area;
+      3. без зайвої вертикальної риски.
+    */
+
+    :root {
+      --sam-list-row-height: 54px;
+      --sam-list-row-padding-y: 2px;
+    }
+
+    html[data-sam-ui-scale-mode="normal"] {
+      --sam-list-row-height: 66px;
+      --sam-list-row-padding-y: 6px;
+    }
+
+    html[data-sam-ui-scale-mode="compact"] {
+      --sam-list-row-height: 58px;
+      --sam-list-row-padding-y: 4px;
+    }
+
+    html[data-sam-ui-scale-mode="ultra"] {
+      --sam-list-row-height: 54px;
+      --sam-list-row-padding-y: 2px;
+    }
+
+    html[data-sam-ui-scale-mode="max"] {
+      --sam-list-row-height: 50px;
+      --sam-list-row-padding-y: 1px;
+    }
+
+    #pane-side [role="listitem"],
+    #pane-side [role="row"],
+    #side [role="listitem"],
+    #side [role="row"] {
+      min-height: var(--sam-list-row-height) !important;
+      height: var(--sam-list-row-height) !important;
+    }
+
+    #pane-side [role="listitem"] > div,
+    #pane-side [role="row"] > div,
+    #side [role="listitem"] > div,
+    #side [role="row"] > div {
+      min-height: var(--sam-list-row-height) !important;
+      height: var(--sam-list-row-height) !important;
+      padding-top: var(--sam-list-row-padding-y) !important;
+      padding-bottom: var(--sam-list-row-padding-y) !important;
+      box-sizing: border-box !important;
+    }
+
+    #pane-side [role="listitem"] span,
+    #pane-side [role="row"] span,
+    #side [role="listitem"] span,
+    #side [role="row"] span {
+      line-height: 1.16 !important;
+    }
+
+    /*
+      Splitter лишається робочим як прозора зона перетягування,
+      але сама вертикальна риска/підсвітка не показується.
+    */
+
+    #samInternalChatSplitterV4,
+    #samInternalChatSplitterV4:hover,
+    #samInternalChatSplitterV4:active {
+      background: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      outline: 0 !important;
+      opacity: 0 !important;
+    }
+
+    /*
+      Прибираємо службові вертикальні borders біля межі лівої/правої панелі,
+      якщо WhatsApp або старий layout їх домалював.
+    */
+
+    #side,
+    #pane-side,
+    #main,
+    section[data-testid="intro-panel"] {
+      border-left: 0 !important;
+      border-right: 0 !important;
+      box-shadow: none !important;
+    }
+  `;
+
+  document.documentElement.appendChild(style);
+}
+
+const SAM_REACTION_TONE_MODIFIER_RE = /[🏻🏼🏽🏾🏿]/gu;
+
+function samNormalizeReactionEmojiTextNode(node) {
+  if (!node || node.nodeType !== Node.TEXT_NODE) {
+    return;
+  }
+
+  const oldValue = String(node.nodeValue || '');
+
+  if (!oldValue) {
+    return;
+  }
+
+  /*
+    На деяких Linux-системах emoji з модифікатором тону шкіри
+    показується як два окремі значки. Для preview/реакцій у SAM
+    прибираємо modifier і лишаємо один базовий emoji.
+  */
+
+  const newValue = oldValue.replace(SAM_REACTION_TONE_MODIFIER_RE, '');
+
+  if (newValue !== oldValue) {
+    node.nodeValue = newValue;
+  }
+}
+
+function samNormalizeReactionEmojiRoot(root) {
+  if (!root) {
+    return;
+  }
+
+  try {
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+
+    const nodes = [];
+
+    while (walker.nextNode()) {
+      nodes.push(walker.currentNode);
+    }
+
+    for (const node of nodes) {
+      samNormalizeReactionEmojiTextNode(node);
+    }
+  } catch (_error) {
+    // ignore
+  }
+}
+
+function samNormalizeReactionEmojiOnce() {
+  const side = document.querySelector('#pane-side') || document.querySelector('#side');
+
+  if (side) {
+    samNormalizeReactionEmojiRoot(side);
+  }
+
+  const reactionRoots = document.querySelectorAll(
+    '#main [data-testid*="reaction"], ' +
+    '#main [aria-label*="reaction"], ' +
+    '#main [aria-label*="Reaction"], ' +
+    '#main [aria-label*="реакц"], ' +
+    '#main [aria-label*="Реакц"]'
+  );
+
+  for (const root of reactionRoots) {
+    samNormalizeReactionEmojiRoot(root);
+  }
+}
+
+function samStartReactionEmojiNormalizer() {
+  if (window.__samReactionEmojiNormalizerStarted) {
+    return;
+  }
+
+  window.__samReactionEmojiNormalizerStarted = true;
+
+  const runSoon = () => {
+    setTimeout(samNormalizeReactionEmojiOnce, 100);
+    setTimeout(samNormalizeReactionEmojiOnce, 600);
+    setTimeout(samNormalizeReactionEmojiOnce, 1500);
+  };
+
+  runSoon();
+
+  if (!document.body) {
+    setTimeout(samStartReactionEmojiNormalizer, 500);
+    return;
+  }
+
+  let timer = null;
+
+  const observer = new MutationObserver((mutations) => {
+    let relevant = false;
+
+    for (const mutation of mutations) {
+      const target = mutation.target;
+
+      if (!target || !target.closest) {
+        continue;
+      }
+
+      if (
+        target.closest('#pane-side') ||
+        target.closest('#side') ||
+        target.closest('#main [data-testid*="reaction"]') ||
+        target.closest('#main [aria-label*="reaction"]') ||
+        target.closest('#main [aria-label*="Reaction"]') ||
+        target.closest('#main [aria-label*="реакц"]') ||
+        target.closest('#main [aria-label*="Реакц"]')
+      ) {
+        relevant = true;
+        break;
+      }
+    }
+
+    if (!relevant) {
+      return;
+    }
+
+    clearTimeout(timer);
+    timer = setTimeout(samNormalizeReactionEmojiOnce, 150);
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+}
+
+function samStartUiPolishFixes() {
+  samEnsureChatListPolishStyle();
+  samStartReactionEmojiNormalizer();
+}
+
+if (!window.__samUiPolishFixesScheduled) {
+  window.__samUiPolishFixesScheduled = true;
+
+  setTimeout(samStartUiPolishFixes, 0);
+  setTimeout(samStartUiPolishFixes, 800);
+  setTimeout(samStartUiPolishFixes, 2000);
+}
+
+// ===== SAM chat list spacing v3 =====
+// Безпечне ущільнення списку чатів без накопичення translate.
+
+
+function samEnsureChatRowAvatarCompactStyle() {
+  if (document.getElementById('samChatRowAvatarCompactStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samChatRowAvatarCompactStyle';
+  style.textContent = `
+    /*
+      Компактніший список чатів:
+      зменшуємо аватарку і внутрішню висоту рядка,
+      щоб рядки виглядали природно, а не розтягнуто.
+    */
+
+    :root {
+      --sam-chat-row-avatar-size: 42px;
+      --sam-chat-row-inner-height: 58px;
+    }
+
+    html[data-sam-ui-scale-mode="normal"] {
+      --sam-chat-row-avatar-size: 46px;
+      --sam-chat-row-inner-height: 64px;
+    }
+
+    html[data-sam-ui-scale-mode="compact"] {
+      --sam-chat-row-avatar-size: 42px;
+      --sam-chat-row-inner-height: 60px;
+    }
+
+    html[data-sam-ui-scale-mode="ultra"] {
+      --sam-chat-row-avatar-size: 38px;
+      --sam-chat-row-inner-height: 56px;
+    }
+
+    html[data-sam-ui-scale-mode="max"] {
+      --sam-chat-row-avatar-size: 34px;
+      --sam-chat-row-inner-height: 52px;
+    }
+
+    #pane-side [data-testid^="list-item-"],
+    #side [data-testid^="list-item-"],
+    #pane-side [role="row"],
+    #side [role="row"] {
+      min-height: var(--sam-chat-row-inner-height) !important;
+      height: var(--sam-chat-row-inner-height) !important;
+    }
+
+    #pane-side [data-testid^="list-item-"] > div,
+    #side [data-testid^="list-item-"] > div,
+    #pane-side [role="row"] > div,
+    #side [role="row"] > div {
+      min-height: var(--sam-chat-row-inner-height) !important;
+      height: var(--sam-chat-row-inner-height) !important;
+      padding-top: 2px !important;
+      padding-bottom: 2px !important;
+      box-sizing: border-box !important;
+    }
+
+    /*
+      Аватарки. WhatsApp може малювати їх як img або як div із background-image.
+    */
+
+    #pane-side [data-testid^="list-item-"] img:not(.emoji),
+    #side [data-testid^="list-item-"] img:not(.emoji),
+    #pane-side [role="row"] img:not(.emoji),
+    #side [role="row"] img:not(.emoji) {
+      width: var(--sam-chat-row-avatar-size) !important;
+      height: var(--sam-chat-row-avatar-size) !important;
+      min-width: var(--sam-chat-row-avatar-size) !important;
+      min-height: var(--sam-chat-row-avatar-size) !important;
+      max-width: var(--sam-chat-row-avatar-size) !important;
+      max-height: var(--sam-chat-row-avatar-size) !important;
+      object-fit: cover !important;
+      border-radius: 50% !important;
+      transform: none !important;
+    }
+
+    #pane-side [data-testid^="list-item-"] [style*="background-image"],
+    #side [data-testid^="list-item-"] [style*="background-image"],
+    #pane-side [role="row"] [style*="background-image"],
+    #side [role="row"] [style*="background-image"] {
+      width: var(--sam-chat-row-avatar-size) !important;
+      height: var(--sam-chat-row-avatar-size) !important;
+      min-width: var(--sam-chat-row-avatar-size) !important;
+      min-height: var(--sam-chat-row-avatar-size) !important;
+      max-width: var(--sam-chat-row-avatar-size) !important;
+      max-height: var(--sam-chat-row-avatar-size) !important;
+      border-radius: 50% !important;
+      background-size: cover !important;
+      background-position: center center !important;
+    }
+
+    #pane-side [data-testid^="list-item-"] span,
+    #side [data-testid^="list-item-"] span,
+    #pane-side [role="row"] span,
+    #side [role="row"] span {
+      line-height: 1.12 !important;
+    }
+  `;
+
+  document.documentElement.appendChild(style);
+}
+
+function samChatRowsSpacingV3GetRows() {
+  const side = document.querySelector('#pane-side') || document.querySelector('#side');
+
+  if (!side) {
+    return [];
+  }
+
+  return Array.from(side.querySelectorAll('[data-testid^="list-item-"], [role="row"]'))
+    .filter((row) => {
+      if (!row || !row.getBoundingClientRect) {
+        return false;
+      }
+
+      const rect = row.getBoundingClientRect();
+
+      return rect.width > 180 && rect.height >= 40;
+    })
+    .sort((a, b) => {
+      return a.getBoundingClientRect().y - b.getBoundingClientRect().y;
+    });
+}
+
+function samChatRowsSpacingV3TargetStep() {
+  const mode = window.__samUiScaleMode || 'ultra';
+
+  /*
+    Реальний WhatsApp зараз дає крок приблизно 76 px при висоті рядка 54 px.
+    Зменшуємо обережно: без злипання і без обрізання тексту.
+  */
+
+  if (mode === 'normal') {
+    return 68;
+  }
+
+  if (mode === 'compact') {
+    return 64;
+  }
+
+  if (mode === 'max') {
+    return 58;
+  }
+
+  return 62;
+}
+
+function samChatRowsSpacingV3Reset(rows) {
+  for (const row of rows) {
+    if (row && row.style) {
+      row.style.removeProperty('translate');
+      row.style.removeProperty('will-change');
+    }
+  }
+}
+
+function samApplyChatRowsSpacingV3() {
+  samEnsureChatRowAvatarCompactStyle();
+
+  let rows = samChatRowsSpacingV3GetRows();
+
+  if (rows.length < 2) {
+    return;
+  }
+
+  /*
+    ВАЖЛИВО:
+    спочатку скидаємо попередній translate, щоб зсув не накопичувався.
+  */
+
+  samChatRowsSpacingV3Reset(rows);
+
+  rows = samChatRowsSpacingV3GetRows();
+
+  if (rows.length < 2) {
+    return;
+  }
+
+  const firstTop = rows[0].getBoundingClientRect().y;
+  const secondTop = rows[1].getBoundingClientRect().y;
+  const originalStep = Math.round(secondTop - firstTop);
+  const targetStep = samChatRowsSpacingV3TargetStep();
+
+  if (!Number.isFinite(originalStep) || originalStep <= 0) {
+    return;
+  }
+
+  /*
+    Якщо WhatsApp уже сам зробив нормальний крок — не чіпаємо.
+  */
+
+  if (originalStep <= targetStep + 1) {
+    return;
+  }
+
+  rows.forEach((row, index) => {
+    const currentTop = row.getBoundingClientRect().y;
+    const desiredTop = firstTop + index * targetStep;
+    const shift = Math.round(desiredTop - currentTop);
+
+    row.style.setProperty('translate', `0 ${shift}px`, 'important');
+    row.style.setProperty('will-change', 'translate', 'important');
+  });
+}
+
+function samStartChatRowsSpacingV3() {
+  if (window.__samChatRowsSpacingV3Started) {
+    return;
+  }
+
+  window.__samChatRowsSpacingV3Started = true;
+
+  const run = () => {
+    try {
+      samApplyChatRowsSpacingV3();
+    } catch (_error) {
+      // ignore
+    }
+  };
+
+  run();
+  setTimeout(run, 300);
+  setTimeout(run, 1000);
+  setTimeout(run, 2500);
+
+  window.addEventListener('resize', run);
+  window.addEventListener('focus', run);
+  document.addEventListener('scroll', run, true);
+
+  if (document.body) {
+    let timer = null;
+
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(run, 120);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'data-testid']
+    });
+  }
+
+  setInterval(run, 2000);
+}
+
+if (!window.__samChatRowsSpacingV3Scheduled) {
+  window.__samChatRowsSpacingV3Scheduled = true;
+
+  setTimeout(samStartChatRowsSpacingV3, 0);
+  setTimeout(samStartChatRowsSpacingV3, 800);
+  setTimeout(samStartChatRowsSpacingV3, 2000);
+}
+
+// ===== SAM reaction preview emoji size fix =====
+// Emoji у preview останнього повідомлення не повинні масштабуватися як аватарки.
+
+function samEnsureReactionPreviewEmojiSizeStyle() {
+  if (document.getElementById('samReactionPreviewEmojiSizeStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samReactionPreviewEmojiSizeStyle';
+  style.textContent = `
+    #pane-side [data-testid^="list-item-"] [data-testid="last-msg-status"] img.emoji,
+    #side [data-testid^="list-item-"] [data-testid="last-msg-status"] img.emoji,
+    #pane-side [role="row"] [data-testid="last-msg-status"] img.emoji,
+    #side [role="row"] [data-testid="last-msg-status"] img.emoji {
+      width: 20px !important;
+      height: 20px !important;
+      min-width: 20px !important;
+      min-height: 20px !important;
+      max-width: 20px !important;
+      max-height: 20px !important;
+      display: inline-block !important;
+      object-fit: initial !important;
+      border-radius: 0 !important;
+      transform: none !important;
+      vertical-align: -4px !important;
+      overflow: hidden !important;
+      background-repeat: no-repeat !important;
+    }
+
+    #pane-side [data-testid^="list-item-"] [data-testid="last-msg-status"],
+    #side [data-testid^="list-item-"] [data-testid="last-msg-status"],
+    #pane-side [role="row"] [data-testid="last-msg-status"],
+    #side [role="row"] [data-testid="last-msg-status"] {
+      align-items: center !important;
+      line-height: 20px !important;
+    }
+  `;
+
+  document.documentElement.appendChild(style);
+}
+
+function samFixReactionPreviewEmojiSizesOnce() {
+  samEnsureReactionPreviewEmojiSizeStyle();
+
+  const roots = document.querySelectorAll(
+    '#pane-side [data-testid="last-msg-status"], ' +
+    '#side [data-testid="last-msg-status"]'
+  );
+
+  for (const root of roots) {
+    const emojis = Array.from(root.querySelectorAll('img.emoji'));
+
+    for (const emoji of emojis) {
+      emoji.style.setProperty('width', '20px', 'important');
+      emoji.style.setProperty('height', '20px', 'important');
+      emoji.style.setProperty('min-width', '20px', 'important');
+      emoji.style.setProperty('min-height', '20px', 'important');
+      emoji.style.setProperty('max-width', '20px', 'important');
+      emoji.style.setProperty('max-height', '20px', 'important');
+      emoji.style.setProperty('display', 'inline-block', 'important');
+      emoji.style.setProperty('object-fit', 'initial', 'important');
+      emoji.style.setProperty('border-radius', '0', 'important');
+      emoji.style.setProperty('transform', 'none', 'important');
+      emoji.style.setProperty('vertical-align', '-4px', 'important');
+      emoji.style.setProperty('overflow', 'hidden', 'important');
+    }
+  }
+}
+
+function samStartReactionPreviewEmojiSizeFix() {
+  if (window.__samReactionPreviewEmojiSizeFixStarted) {
+    return;
+  }
+
+  window.__samReactionPreviewEmojiSizeFixStarted = true;
+
+  const run = () => {
+    try {
+      samFixReactionPreviewEmojiSizesOnce();
+    } catch (_error) {
+      // ignore
+    }
+  };
+
+  run();
+  setTimeout(run, 300);
+  setTimeout(run, 1000);
+  setTimeout(run, 2500);
+
+  if (document.body) {
+    let timer = null;
+
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(run, 100);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'data-testid', 'title']
+    });
+  }
+
+  setInterval(run, 2000);
+}
+
+if (!window.__samReactionPreviewEmojiSizeFixScheduled) {
+  window.__samReactionPreviewEmojiSizeFixScheduled = true;
+
+  setTimeout(samStartReactionPreviewEmojiSizeFix, 0);
+  setTimeout(samStartReactionPreviewEmojiSizeFix, 800);
+  setTimeout(samStartReactionPreviewEmojiSizeFix, 2000);
+}
+
+// ===== SAM all chat-list emoji size fix =====
+// Усі emoji-спрайти в лівому списку чатів мають бути малими.
+// Це не чіпає аватарки, бо аватарки не мають class="emoji".
+
+function samEnsureAllChatListEmojiSizeStyle() {
+  if (document.getElementById('samAllChatListEmojiSizeStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samAllChatListEmojiSizeStyle';
+  style.textContent = `
+    #pane-side img.emoji,
+    #side img.emoji {
+      width: 20px !important;
+      height: 20px !important;
+      min-width: 20px !important;
+      min-height: 20px !important;
+      max-width: 20px !important;
+      max-height: 20px !important;
+      display: inline-block !important;
+      object-fit: initial !important;
+      border-radius: 0 !important;
+      transform: none !important;
+      vertical-align: -4px !important;
+      overflow: hidden !important;
+      background-repeat: no-repeat !important;
+    }
+
+    #pane-side span:has(> img.emoji),
+    #side span:has(> img.emoji) {
+      display: inline-block !important;
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      height: 20px !important;
+      min-height: 20px !important;
+      max-height: 20px !important;
+      overflow: visible !important;
+      line-height: 20px !important;
+      vertical-align: middle !important;
+    }
+  `;
+
+  document.documentElement.appendChild(style);
+}
+
+function samFixAllChatListEmojiSizesOnce() {
+  samEnsureAllChatListEmojiSizeStyle();
+
+  const roots = [
+    document.querySelector('#pane-side'),
+    document.querySelector('#side')
+  ].filter(Boolean);
+
+  for (const root of roots) {
+    const emojis = Array.from(root.querySelectorAll('img.emoji'));
+
+    for (const emoji of emojis) {
+      emoji.style.setProperty('width', '20px', 'important');
+      emoji.style.setProperty('height', '20px', 'important');
+      emoji.style.setProperty('min-width', '20px', 'important');
+      emoji.style.setProperty('min-height', '20px', 'important');
+      emoji.style.setProperty('max-width', '20px', 'important');
+      emoji.style.setProperty('max-height', '20px', 'important');
+      emoji.style.setProperty('display', 'inline-block', 'important');
+      emoji.style.setProperty('object-fit', 'initial', 'important');
+      emoji.style.setProperty('border-radius', '0', 'important');
+      emoji.style.setProperty('transform', 'none', 'important');
+      emoji.style.setProperty('vertical-align', '-4px', 'important');
+      emoji.style.setProperty('overflow', 'hidden', 'important');
+
+      const parent = emoji.parentElement;
+
+      if (parent && parent.style) {
+        parent.style.setProperty('width', 'auto', 'important');
+        parent.style.setProperty('min-width', '0', 'important');
+        parent.style.setProperty('max-width', 'none', 'important');
+        parent.style.setProperty('height', '20px', 'important');
+        parent.style.setProperty('min-height', '20px', 'important');
+        parent.style.setProperty('max-height', '20px', 'important');
+        parent.style.setProperty('overflow', 'visible', 'important');
+        parent.style.setProperty('line-height', '20px', 'important');
+      }
+    }
+  }
+}
+
+function samStartAllChatListEmojiSizeFix() {
+  if (window.__samAllChatListEmojiSizeFixStarted) {
+    return;
+  }
+
+  window.__samAllChatListEmojiSizeFixStarted = true;
+
+  const run = () => {
+    try {
+      samFixAllChatListEmojiSizesOnce();
+    } catch (_error) {
+      // ignore
+    }
+  };
+
+  run();
+  setTimeout(run, 300);
+  setTimeout(run, 1000);
+  setTimeout(run, 2500);
+
+  if (document.body) {
+    let timer = null;
+
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(run, 100);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'data-testid', 'title', 'alt']
+    });
+  }
+
+  setInterval(run, 2000);
+}
+
+if (!window.__samAllChatListEmojiSizeFixScheduled) {
+  window.__samAllChatListEmojiSizeFixScheduled = true;
+
+  setTimeout(samStartAllChatListEmojiSizeFix, 0);
+  setTimeout(samStartAllChatListEmojiSizeFix, 800);
+  setTimeout(samStartAllChatListEmojiSizeFix, 2000);
+}
+
+// ===== SAM drawer middle border fix =====
+// Прибирає вертикальну риску WhatsApp між лівим drawer і правою областю.
+// Реальна причина: data-testid="drawer-middle" має border-left: 1px solid rgba(255,255,255,0.1).
+
+function samEnsureDrawerMiddleBorderFixStyle() {
+  if (document.getElementById('samDrawerMiddleBorderFixStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samDrawerMiddleBorderFixStyle';
+  style.textContent = `
+    [data-testid="drawer-middle"],
+    [data-testid="drawer-left"],
+    [data-testid="drawer-fullscreen"] {
+      border-left: 0 !important;
+      border-right: 0 !important;
+      box-shadow: none !important;
+      outline: 0 !important;
+    }
+
+    [data-testid="drawer-middle"]::before,
+    [data-testid="drawer-middle"]::after,
+    [data-testid="drawer-left"]::before,
+    [data-testid="drawer-left"]::after,
+    [data-testid="drawer-fullscreen"]::before,
+    [data-testid="drawer-fullscreen"]::after {
+      content: none !important;
+      display: none !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+  `;
+
+  document.documentElement.appendChild(style);
+}
+
+function samFixDrawerMiddleBorderOnce() {
+  samEnsureDrawerMiddleBorderFixStyle();
+
+  const nodes = document.querySelectorAll(
+    '[data-testid="drawer-middle"], ' +
+    '[data-testid="drawer-left"], ' +
+    '[data-testid="drawer-fullscreen"]'
+  );
+
+  for (const node of nodes) {
+    if (!node || !node.style) {
+      continue;
+    }
+
+    node.style.setProperty('border-left', '0', 'important');
+    node.style.setProperty('border-right', '0', 'important');
+    node.style.setProperty('box-shadow', 'none', 'important');
+    node.style.setProperty('outline', '0', 'important');
+  }
+}
+
+function samStartDrawerMiddleBorderFix() {
+  if (window.__samDrawerMiddleBorderFixStarted) {
+    return;
+  }
+
+  window.__samDrawerMiddleBorderFixStarted = true;
+
+  const run = () => {
+    try {
+      samFixDrawerMiddleBorderOnce();
+    } catch (_error) {
+      // ignore
+    }
+  };
+
+  run();
+  setTimeout(run, 300);
+  setTimeout(run, 1000);
+  setTimeout(run, 2500);
+
+  window.addEventListener('resize', run);
+  window.addEventListener('focus', run);
+
+  if (document.body) {
+    let timer = null;
+
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(run, 120);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'data-testid']
+    });
+  }
+
+  setInterval(run, 2000);
+}
+
+if (!window.__samDrawerMiddleBorderFixScheduled) {
+  window.__samDrawerMiddleBorderFixScheduled = true;
+
+  setTimeout(samStartDrawerMiddleBorderFix, 0);
+  setTimeout(samStartDrawerMiddleBorderFix, 800);
+  setTimeout(samStartDrawerMiddleBorderFix, 2000);
+}
+
 async function samRefreshUiScaleMode() {
   try {
     const settings = await ipcRenderer.invoke('settings:load');
