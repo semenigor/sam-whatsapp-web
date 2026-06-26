@@ -439,16 +439,12 @@ function escapeHtml(value) {
 }
 
 function buildMessagesClipboardPayload(messages) {
-  const safeMessages = Array.isArray(messages)
-    ? messages
-        .map((message) => String(message.text || '').trim())
-        .filter((text) => text.length > 0)
-    : [];
-
-  const plain = safeMessages.join('\n');
+  const plain = (Array.isArray(messages) ? messages : [])
+    .map((message) => String(message && message.text ? message.text : '').trim())
+    .filter(Boolean)
+    .join('\n\n');
 
   return {
-    count: safeMessages.length,
     plain
   };
 }

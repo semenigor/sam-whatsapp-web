@@ -365,34 +365,175 @@ function parsePrePlainText(preText) {
   };
 }
 
+function samNormalizeCopiedMessageSpacing(text) {
+  let value = cleanText(text || '');
+
+  value = value
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim();
+
+  /*
+    WhatsApp DOM може давати порожній рядок між data-pre-plain-text
+    і першим ol/li. Для вставки в Writer це зайвий розрив.
+  */
+
+  value = value.replace(
+    /(^|\n)(\d{1,2}:\d{2}\s+\d{2}\.\d{2}\.\d{4})\n{2,}(?=\d+\.\s)/g,
+    '$1$2\n'
+  );
+
+  return value;
+}
+
+function samGetDirectListItemText(li) {
+  const clone = li.cloneNode(true);
+
+  for (const nested of Array.from(clone.querySelectorAll('ol, ul'))) {
+    nested.remove();
+  }
+
+  return samNormalizeCopiedMessageSpacing(clone.innerText || clone.textContent || '');
+}
+
+function samFormatListForClipboard(list, depth = 0) {
+  const tag = String(list.tagName || '').toLowerCase();
+  const isOrdered = tag === 'ol';
+
+  let number = Number.parseInt(list.getAttribute('start') || '1', 10);
+
+  if (!Number.isFinite(number) || number < 1) {
+    number = 1;
+  }
+
+  const indent = '  '.repeat(Math.max(0, depth));
+  const lines = [];
+
+  const items = Array.from(list.children).filter((child) => {
+    return String(child.tagName || '').toLowerCase() === 'li';
+  });
+
+  for (const li of items) {
+    const prefix = isOrdered ? `${number}. ` : '- ';
+    const directText = samGetDirectListItemText(li);
+    const directLines = directText
+      .split(/\n+/)
+      .map((line) => cleanText(line))
+      .filter(Boolean);
+
+    if (directLines.length > 0) {
+      lines.push(`${indent}${prefix}${directLines[0]}`);
+
+      for (const extraLine of directLines.slice(1)) {
+        lines.push(`${indent}${' '.repeat(prefix.length)}${extraLine}`);
+      }
+    } else {
+      lines.push(`${indent}${prefix.trim()}`);
+    }
+
+    const nestedLists = Array.from(li.children).filter((child) => {
+      const childTag = String(child.tagName || '').toLowerCase();
+      return childTag === 'ol' || childTag === 'ul';
+    });
+
+    for (const nested of nestedLists) {
+      const nestedText = samFormatListForClipboard(nested, depth + 1);
+
+      if (nestedText) {
+        lines.push(nestedText);
+      }
+    }
+
+    if (isOrdered) {
+      number += 1;
+    }
+  }
+
+  return lines.filter(Boolean).join('\n');
+}
+
+function samElementTextForClipboard(element) {
+  if (!element) {
+    return '';
+  }
+
+  const clone = element.cloneNode(true);
+
+  const lists = Array.from(clone.querySelectorAll('ol, ul')).filter((list) => {
+    const parentList = list.parentElement ? list.parentElement.closest('ol, ul') : null;
+    return !parentList;
+  });
+
+  for (const list of lists) {
+    const listText = samFormatListForClipboard(list, 0);
+
+    if (listText) {
+      list.replaceWith(document.createTextNode(`\n${listText}\n`));
+    }
+  }
+
+  return samNormalizeCopiedMessageSpacing(clone.innerText || clone.textContent || '');
+}
+
+function samCollectMessageTextContainers(root) {
+  const containers = [];
+
+  const preElements = Array.from(root.querySelectorAll('[data-pre-plain-text]'));
+
+  for (const preElement of preElements) {
+    const innerContainers = Array.from(
+      preElement.querySelectorAll('.copyable-text, .selectable-text')
+    ).filter((element) => samElementTextForClipboard(element));
+
+    if (innerContainers.length > 0) {
+      containers.push(...innerContainers);
+    } else {
+      containers.push(preElement);
+    }
+  }
+
+  if (containers.length === 0) {
+    containers.push(...Array.from(root.querySelectorAll('.copyable-text, .selectable-text')));
+  }
+
+  return containers.filter((element, index, array) => {
+    return !array.some((other, otherIndex) => {
+      return otherIndex !== index && other.contains(element);
+    });
+  });
+}
+
 function extractMessageData(root) {
   const preElement = root.querySelector('[data-pre-plain-text]');
   const preText = preElement ? preElement.getAttribute('data-pre-plain-text') : '';
-  const meta = parsePrePlainText(preText);
 
-  const textElements = Array.from(root.querySelectorAll('span.selectable-text, div.selectable-text'));
-  const textValues = textElements.map((element) => element.innerText || element.textContent || '');
-  const uniqueTexts = uniqueNonEmpty(textValues);
+  const textContainers = samCollectMessageTextContainers(root);
 
-  let text = uniqueTexts.join('\n');
+  const textValues = textContainers
+    .map((element) => samElementTextForClipboard(element))
+    .map((value) => cleanText(value))
+    .filter(Boolean);
+
+  let text = samNormalizeCopiedMessageSpacing(textValues.join('\n'));
 
   if (!text && preElement) {
-    text = cleanText(preElement.innerText || preElement.textContent || '');
+    text = samNormalizeCopiedMessageSpacing(samElementTextForClipboard(preElement));
   }
 
   if (!text) {
-    return null;
+    text = samNormalizeCopiedMessageSpacing(root.innerText || root.textContent || '');
   }
 
-  const dataId = root.getAttribute('data-id') || '';
-  const keySource = `${dataId}\n${preText}\n${text}`;
-  const key = dataId || hashString(keySource);
+  const keySource = cleanText(`${preText}\n${text}`) || cleanText(root.innerText || root.textContent || '');
+  const key = keySource.slice(0, 800);
 
   return {
     key,
-    time: meta.time,
-    sender: meta.sender,
-    text
+    text,
+    preText
   };
 }
 
