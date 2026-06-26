@@ -1,0 +1,53 @@
+{
+  "name": "sam-whatsapp-web",
+  "version": "0.1.0",
+  "description": "Linux Electron wrapper for WhatsApp Web",
+  "main": "main.js",
+  "private": true,
+  "author": "SAM",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "electron .",
+    "dist": "electron-builder --linux AppImage",
+    "dist:dir": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.semenigor.samwhatsappweb",
+    "productName": "SAM WhatsApp Web",
+    "files": [
+      "main.js",
+      "assets/**/*",
+      "package.json",
+      "preview.html",
+      "preview_preload.js",
+      "wa_preload.js",
+      "settings.html",
+      "settings_preload.js"
+    ],
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Network",
+      "icon": "build/icons",
+      "executableName": "sam-whatsapp-web",
+      "synopsis": "WhatsApp Web Linux wrapper",
+      "description": "Electron wrapper for WhatsApp Web on Linux"
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "34.5.8",
+    "electron-builder": "24.13.3"
+  },
+  "overrides": {
+    "@noble/hashes": "1.8.0"
+  }
+}

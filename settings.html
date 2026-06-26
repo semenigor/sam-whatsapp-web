@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <title>Налаштування</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #111827;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+    }
+
+    .wrap {
+      padding: 18px;
+      max-width: 760px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: 20px;
+      font-weight: 700;
+      color: #f9fafb;
+    }
+
+    fieldset {
+      border: 1px solid #374151;
+      border-radius: 10px;
+      margin: 0 0 14px;
+      padding: 14px;
+      background: #1f2937;
+    }
+
+    legend {
+      padding: 0 8px;
+      color: #d1d5db;
+      font-weight: 700;
+    }
+
+    label {
+      display: block;
+      margin: 10px 0;
+      line-height: 1.35;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 10px 0;
+    }
+
+    .row label {
+      margin: 0;
+      min-width: 250px;
+    }
+
+    input[type="number"],
+    select {
+      background: #111827;
+      color: #f9fafb;
+      border: 1px solid #4b5563;
+      border-radius: 7px;
+      padding: 7px 9px;
+      min-width: 180px;
+    }
+
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      vertical-align: middle;
+    }
+
+    .hint {
+      color: #9ca3af;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+
+    button {
+      border: 1px solid #4b5563;
+      background: #374151;
+      color: #f9fafb;
+      border-radius: 7px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #4b5563;
+    }
+
+    button.primary {
+      background: #047857;
+      border-color: #059669;
+    }
+
+    button.primary:hover {
+      background: #059669;
+    }
+
+    button.danger {
+      background: #7f1d1d;
+      border-color: #991b1b;
+    }
+
+    button.danger:hover {
+      background: #991b1b;
+    }
+
+    .status {
+      min-height: 20px;
+      margin-top: 10px;
+      color: #86efac;
+      font-size: 13px;
+    }
+
+    .status.error {
+      color: #fecaca;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Налаштування SAM WhatsApp Web</h1>
+
+    <fieldset>
+      <legend>Документи Word/Excel</legend>
+
+      
+      <div class="field">
+        <label for="uiScaleMode">Масштаб інтерфейсу WhatsApp</label>
+        <select id="uiScaleMode">
+          <option value="normal">Звичайний</option>
+          <option value="compact">Компактний</option>
+          <option value="ultra">Дуже компактний</option>
+          <option value="max">Максимально компактний</option>
+        </select>
+        <div class="hint">
+          Змінює розмір списку чатів, аватарок, тексту повідомлень і щільність відображення.
+        </div>
+      </div>
+
+<div class="row">
+        <label for="officeDownloadLocation">Куди зберігати Word/Excel перед відкриттям</label>
+        <select id="officeDownloadLocation">
+          <option value="cache">Службова папка програми</option>
+          <option value="downloads">Папка Завантаження</option>
+        </select>
+      </div>
+      <div class="hint">
+        Рекомендовано: службова папка програми. Так папка "Завантаження" не захаращується.
+      </div>
+
+      <label>
+        <input type="checkbox" id="replaceSameFilename">
+        Якщо файл з такою ж назвою вже є — замінювати його, а не створювати копію
+      </label>
+
+      <label>
+        <input type="checkbox" id="previewOfficeDownloads">
+        Показувати попередній перегляд Word/Excel
+      </label>
+
+      <label>
+        <input type="checkbox" id="autoOpenOfficeDownloads">
+        Якщо preview вимкнено — автоматично відкривати Word/Excel у LibreOffice
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Очищення тимчасових файлів</legend>
+
+      <div class="row">
+        <label for="attachmentCacheDays">Зберігати завантажені Word/Excel, днів</label>
+        <input type="number" id="attachmentCacheDays" min="1" max="365" step="1">
+      </div>
+
+      <div class="row">
+        <label for="previewCacheDays">Зберігати PDF preview, днів</label>
+        <input type="number" id="previewCacheDays" min="1" max="365" step="1">
+      </div>
+
+      <div class="row">
+        <button id="openAttachmentCache">Відкрити папку Word/Excel</button>
+        <button id="openPreviewCache">Відкрити папку preview</button>
+        <button class="danger" id="clearCaches">Очистити тимчасові файли</button>
+      </div>
+    </fieldset>
+
+    <div class="buttons">
+      <button id="reload">Перечитати</button>
+      <button class="primary" id="save">Зберегти</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <script>
+    const fields = {
+      uiScaleMode: document.getElementById('uiScaleMode'),
+        officeDownloadLocation: document.getElementById('officeDownloadLocation'),
+      replaceSameFilename: document.getElementById('replaceSameFilename'),
+      previewOfficeDownloads: document.getElementById('previewOfficeDownloads'),
+      autoOpenOfficeDownloads: document.getElementById('autoOpenOfficeDownloads'),
+      attachmentCacheDays: document.getElementById('attachmentCacheDays'),
+      previewCacheDays: document.getElementById('previewCacheDays')
+    };
+
+    const status = document.getElementById('status');
+
+    function showStatus(message, isError = false) {
+      status.textContent = message;
+      status.className = isError ? 'status error' : 'status';
+    }
+
+    function readForm() {
+      return {
+        uiScaleMode: fields.uiScaleMode.value || 'ultra',
+        officeDownloadLocation: fields.officeDownloadLocation.value,
+        replaceSameFilename: fields.replaceSameFilename.checked,
+        previewOfficeDownloads: fields.previewOfficeDownloads.checked,
+        autoOpenOfficeDownloads: fields.autoOpenOfficeDownloads.checked,
+        attachmentCacheDays: Number(fields.attachmentCacheDays.value || 7),
+        previewCacheDays: Number(fields.previewCacheDays.value || 7)
+      };
+    }
+
+    function fillForm(settings) {
+      fields.uiScaleMode.value = settings.uiScaleMode || 'ultra';
+      fields.officeDownloadLocation.value = settings.officeDownloadLocation || 'cache';
+      fields.replaceSameFilename.checked = Boolean(settings.replaceSameFilename);
+      fields.previewOfficeDownloads.checked = Boolean(settings.previewOfficeDownloads);
+      fields.autoOpenOfficeDownloads.checked = Boolean(settings.autoOpenOfficeDownloads);
+      fields.attachmentCacheDays.value = Number(settings.attachmentCacheDays || 7);
+      fields.previewCacheDays.value = Number(settings.previewCacheDays || 7);
+    }
+
+    async function loadSettings() {
+      try {
+        const settings = await window.settingsApi.load();
+        fillForm(settings);
+        showStatus('Налаштування завантажено.');
+      } catch (error) {
+        showStatus(String(error), true);
+      }
+    }
+
+    document.getElementById('save').addEventListener('click', async () => {
+      try {
+        const saved = await window.settingsApi.save(readForm());
+        fillForm(saved);
+        showStatus('Налаштування збережено.');
+      } catch (error) {
+        showStatus(String(error), true);
+      }
+    });
+
+    document.getElementById('reload').addEventListener('click', loadSettings);
+
+    document.getElementById('clearCaches').addEventListener('click', async () => {
+      try {
+        const result = await window.settingsApi.clearCaches();
+        showStatus(`Очищено файлів: ${result.deletedFiles}.`);
+      } catch (error) {
+        showStatus(String(error), true);
+      }
+    });
+
+    document.getElementById('openAttachmentCache').addEventListener('click', async () => {
+      await window.settingsApi.openAttachmentCache();
+    });
+
+    document.getElementById('openPreviewCache').addEventListener('click', async () => {
+      await window.settingsApi.openPreviewCache();
+    });
+
+    loadSettings();
+  </script>
+</body>
+</html>

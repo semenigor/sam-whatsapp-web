@@ -1,0 +1,57 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+release/
+out/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# temporary backups
+*.bak
+*.bak_*
+*_backup*
+*.tmp
+
+# local env
+.env
+.env.local
+
+# Electron / app runtime local data
+userData/
+cache/
+previews/
+attachments/
+
+# archives
+*.tar.gz
+*.zip
+
+# build artifacts - do not commit
+dist/
+dist*/
+dist */
+dist (копія)/
+linux-unpacked/
+*.AppImage
+*.blockmap
+latest-linux.yml
+builder-debug.yml
+builder-effective-config.yaml
+
+# broken/manual backup files
+*.broken_*
+*.bak*
+*.old
+*.orig
