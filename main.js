@@ -34,6 +34,10 @@ const { autoUpdater } = require('electron-updater');
 const electronLog = require('electron-log');
 
 const APP_NAME = 'SAM WhatsApp Web';
+
+function getAppWindowTitle() {
+  return `${APP_NAME} v${app.getVersion()}`;
+}
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
 const CHROME_USER_AGENT = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
 const SAM_DISABLE_PRELOAD = process.env.SAM_DISABLE_PRELOAD === '1';
@@ -739,7 +743,7 @@ function createAppMenu() {
 
             dialog.showMessageBox({
               type: 'info',
-              title: APP_NAME,
+              title: getAppWindowTitle(),
               message: 'Тимчасові файли очищено',
               detail: `Видалено файлів: ${result.deletedFiles}`,
               buttons: ['OK']
@@ -847,7 +851,7 @@ function showMainWindowFromTray() {
   }
 
   mainWindow.focus();
-  mainWindow.setTitle(APP_NAME);
+  mainWindow.setTitle(getAppWindowTitle());
 }
 
 function createTray() {
@@ -981,7 +985,7 @@ async function openOfficeDocument(filePath) {
   if (!officeBinary) {
     await dialog.showMessageBox({
       type: 'warning',
-      title: APP_NAME,
+      title: getAppWindowTitle(),
       message: 'LibreOffice не знайдено',
       detail: 'Буде використано системну програму за замовчуванням.',
       buttons: ['OK']
@@ -1011,7 +1015,7 @@ async function openOfficeDocument(filePath) {
   } catch (error) {
     await dialog.showMessageBox({
       type: 'error',
-      title: APP_NAME,
+      title: getAppWindowTitle(),
       message: 'Не вдалося відкрити документ через LibreOffice',
       detail: String(error),
       buttons: ['OK']
@@ -1196,7 +1200,7 @@ async function showOfficePreview(filePath) {
   } catch (error) {
     const result = await dialog.showMessageBox({
       type: 'warning',
-      title: APP_NAME,
+      title: getAppWindowTitle(),
       message: 'Не вдалося створити попередній перегляд',
       detail: `${String(error)}\n\nФайл можна відкрити напряму в LibreOffice.`,
       buttons: ['Відкрити в LibreOffice', 'Показати в папці', 'OK'],
@@ -1252,7 +1256,7 @@ async function openExternalFile(filePath) {
     if (errorMessage) {
       await dialog.showMessageBox({
         type: 'warning',
-        title: APP_NAME,
+        title: getAppWindowTitle(),
         message: 'Не вдалося автоматично відкрити файл',
         detail: `${filePath}\n\n${errorMessage}`,
         buttons: ['OK']
@@ -1261,7 +1265,7 @@ async function openExternalFile(filePath) {
   } catch (error) {
     await dialog.showMessageBox({
       type: 'error',
-      title: APP_NAME,
+      title: getAppWindowTitle(),
       message: 'Помилка відкриття файлу',
       detail: String(error),
       buttons: ['OK']
@@ -1272,7 +1276,7 @@ async function openExternalFile(filePath) {
 async function showDownloadActions(filePath) {
   const result = await dialog.showMessageBox({
     type: 'info',
-    title: APP_NAME,
+    title: getAppWindowTitle(),
     message: 'Файл завантажено',
     detail: filePath,
     buttons: ['Відкрити', 'Показати в папці', 'OK'],
@@ -1467,7 +1471,7 @@ function createMainWindow() {
     height: 820,
     minWidth: 560,
     minHeight: 420,
-    title: APP_NAME,
+    title: getAppWindowTitle(),
     icon: getIconPath(),
     show: false,
     webPreferences: {
@@ -1485,11 +1489,11 @@ function createMainWindow() {
     console.log('[SAM] DIAGNOSTIC SAFE MODE: wa_preload.js disabled');
   }
 
-  mainWindow.setTitle(APP_NAME);
+  mainWindow.setTitle(getAppWindowTitle());
 
   mainWindow.webContents.on('page-title-updated', (event) => {
     event.preventDefault();
-    mainWindow.setTitle(APP_NAME);
+    mainWindow.setTitle(getAppWindowTitle());
   });
 
   mainWindow.setResizable(true);
