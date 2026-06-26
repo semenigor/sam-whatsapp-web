@@ -55,3 +55,6 @@ builder-effective-config.yaml
 *.bak*
 *.old
 *.orig
+
+# local GitHub release note drafts
+RELEASE_NOTES_*.md

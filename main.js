@@ -30,6 +30,8 @@ const { pathToFileURL } = require('url');
 const fs = require('fs');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
+const electronLog = require('electron-log');
 
 const APP_NAME = 'SAM WhatsApp Web';
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
@@ -828,6 +830,7 @@ function createAppMenu() {
 function showMainWindowFromTray() {
   if (!mainWindow) {
     createMainWindow();
+  setupAutoUpdater();
     return;
   }
 
@@ -1563,7 +1566,94 @@ if (!gotLock) {
     showMainWindow();
   });
 
-  app.whenReady().then(() => {
+  
+function setupAutoUpdater() {
+  if (!app.isPackaged) {
+    return;
+  }
+
+  autoUpdater.logger = electronLog;
+  autoUpdater.logger.transports.file.level = 'info';
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowPrerelease = false;
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[auto-update] checking for update');
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    console.log('[auto-update] update not available');
+  });
+
+  autoUpdater.on('update-available', async (info) => {
+    console.log('[auto-update] update available', info && info.version);
+
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: ['Завантажити', 'Пізніше'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Доступне оновлення',
+      message: `Доступна нова версія SAM WhatsApp Web ${info.version || ''}.`,
+      detail: 'Завантажити оновлення зараз?'
+    });
+
+    if (result.response === 0) {
+      autoUpdater.downloadUpdate().catch((err) => {
+        console.error('[auto-update] download error', err);
+      });
+    }
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = progress && typeof progress.percent === 'number'
+      ? progress.percent.toFixed(1)
+      : '?';
+
+    console.log(`[auto-update] download progress: ${percent}%`);
+  });
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    console.log('[auto-update] update downloaded', info && info.version);
+
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: ['Перезапустити зараз', 'Пізніше'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Оновлення завантажено',
+      message: 'Оновлення SAM WhatsApp Web завантажено.',
+      detail: 'Перезапустити програму і встановити оновлення?'
+    });
+
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall(false, true);
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[auto-update] error', err);
+
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['OK'],
+      title: 'Помилка оновлення',
+      message: 'Не вдалося перевірити або завантажити оновлення.',
+      detail: err && err.message ? err.message : String(err || '')
+    }).catch(() => {});
+  });
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('[auto-update] check error', err);
+    });
+  }, 8000);
+}
+
+
+app.whenReady().then(() => {
     app.setName(APP_NAME);
 
     loadSettings();
