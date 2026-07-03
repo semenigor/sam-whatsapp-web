@@ -18,6 +18,11 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -25,6 +30,25 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Build SAM Encrypt Linux helper
+        working-directory: helpers/sam_encrypt
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "PyNaCl>=1.5" "cffi>=1.16" "pyinstaller>=6.0"
+          rm -rf build dist sam_encrypt_cli_bin.spec
+          python -m PyInstaller \
+            --clean \
+            --onefile \
+            --name sam_encrypt_cli_bin \
+            --hidden-import _cffi_backend \
+            --collect-all cffi \
+            --collect-all nacl \
+            sam_encrypt_cli.py
+          cp dist/sam_encrypt_cli_bin ./sam_encrypt_cli_bin
+          chmod +x ./sam_encrypt_cli_bin
+          ls -lh ./sam_encrypt_cli_bin
+          file ./sam_encrypt_cli_bin
 
       - name: Build Linux AppImage
         run: npm run dist:linux -- --publish never
@@ -54,8 +78,37 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Build SAM Encrypt Windows helper
+        working-directory: helpers/sam_encrypt
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "PyNaCl>=1.5" "cffi>=1.16" "pyinstaller>=6.0"
+
+          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+          Remove-Item -Force sam_encrypt_cli_bin.spec -ErrorAction SilentlyContinue
+          Remove-Item -Force sam_encrypt_cli_bin -ErrorAction SilentlyContinue
+
+          python -m PyInstaller `
+            --clean `
+            --onefile `
+            --name sam_encrypt_cli_bin `
+            --hidden-import _cffi_backend `
+            --collect-all cffi `
+            --collect-all nacl `
+            sam_encrypt_cli.py
+
+          Copy-Item dist\sam_encrypt_cli_bin.exe .\sam_encrypt_cli_bin.exe -Force
+
+          Get-Item .\sam_encrypt_cli_bin.exe | Format-List FullName,Length
 
       - name: Build Windows portable
         run: npm run dist:win -- --publish never
