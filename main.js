@@ -1811,6 +1811,7 @@ app.whenReady().then(() => {
   registerNotesIpcHandlers();
     registerPreviewIpcHandlers();
   registerSamEncryptIpcHandlers();
+  registerSamEncryptFileIpcHandlers();
     createAppMenu();
   ensureStandardEditMenuForClipboard();
     createTray();
@@ -2060,5 +2061,59 @@ function ensureStandardEditMenuForClipboard() {
 
   currentMenu.insert(insertIndex, editMenu);
   Menu.setApplicationMenu(currentMenu);
+}
+
+function getSamEncryptOutboxDir() {
+  const outboxDir = path.join(getSamEncryptHomeDir(), 'outbox');
+  fs.mkdirSync(outboxDir, { recursive: true });
+  return outboxDir;
+}
+
+async function chooseFileAndEncryptSelf(payload = {}) {
+  const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
+
+  const dialogResult = await dialog.showOpenDialog(ownerWindow, {
+    title: 'Вибрати файл для шифрування',
+    properties: ['openFile'],
+    buttonLabel: 'Зашифрувати'
+  });
+
+  if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
+    return {
+      ok: false,
+      cancelled: true,
+      error: null
+    };
+  }
+
+  const inputPath = dialogResult.filePaths[0];
+  const outputDir = payload.outputDir
+    ? String(payload.outputDir)
+    : getSamEncryptOutboxDir();
+
+  const result = await runSamEncryptCli([
+    'encrypt-self',
+    '--input',
+    inputPath,
+    '--output-dir',
+    outputDir
+  ]);
+
+  if (result && result.ok && result.output_path && payload.revealInFolder) {
+    shell.showItemInFolder(result.output_path);
+  }
+
+  return {
+    ...result,
+    inputPath,
+    outputDir,
+    revealInFolder: Boolean(payload.revealInFolder)
+  };
+}
+
+function registerSamEncryptFileIpcHandlers() {
+  ipcMain.handle('sam-encrypt:choose-file-and-encrypt-self', async (_event, payload = {}) => {
+    return chooseFileAndEncryptSelf(payload || {});
+  });
 }
 

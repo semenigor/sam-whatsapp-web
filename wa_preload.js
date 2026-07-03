@@ -6855,7 +6855,8 @@ try {
     decrypt: (inputPath, outputDir) => ipcRenderer.invoke('sam-encrypt:decrypt', {
       inputPath,
       outputDir
-    })
+    }),
+    chooseFileAndEncryptSelf: (options = {}) => ipcRenderer.invoke('sam-encrypt:choose-file-and-encrypt-self', options || {})
   };
 
   let exposed = false;
@@ -6874,5 +6875,140 @@ try {
   }
 } catch (error) {
   console.error('SAM Encrypt preload bridge failed:', error);
+}
+
+const SAM_ENCRYPT_BUTTON_ID = 'sam-encrypt-floating-button-v1';
+const SAM_ENCRYPT_STATUS_ID = 'sam-encrypt-status-v1';
+
+function samEncryptShowStatus(message, isError = false) {
+  let box = document.getElementById(SAM_ENCRYPT_STATUS_ID);
+
+  if (!box) {
+    box = document.createElement('div');
+    box.id = SAM_ENCRYPT_STATUS_ID;
+    box.style.position = 'fixed';
+    box.style.left = '58px';
+    box.style.top = '292px';
+    box.style.zIndex = '2147483647';
+    box.style.maxWidth = '360px';
+    box.style.padding = '8px 10px';
+    box.style.borderRadius = '8px';
+    box.style.fontSize = '13px';
+    box.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    box.style.boxShadow = '0 4px 14px rgba(0,0,0,0.25)';
+    box.style.background = '#202c33';
+    box.style.color = '#e9edef';
+    box.style.border = '1px solid rgba(255,255,255,0.12)';
+    document.body.appendChild(box);
+  }
+
+  box.textContent = message;
+  box.style.background = isError ? '#4a1f1f' : '#202c33';
+  box.style.display = 'block';
+
+  window.clearTimeout(box._samHideTimer);
+  box._samHideTimer = window.setTimeout(() => {
+    box.style.display = 'none';
+  }, isError ? 7000 : 4000);
+}
+
+async function samEncryptChooseFileManualSend() {
+  const button = document.getElementById(SAM_ENCRYPT_BUTTON_ID);
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.style.opacity = '0.65';
+    }
+
+    samEncryptShowStatus('SAM Encrypt: вибери файл для шифрування...');
+
+    const result = await ipcRenderer.invoke('sam-encrypt:choose-file-and-encrypt-self', {
+      revealInFolder: true
+    });
+
+    if (result && result.cancelled) {
+      samEncryptShowStatus('SAM Encrypt: вибір файлу скасовано.');
+      return;
+    }
+
+    if (!result || !result.ok) {
+      samEncryptShowStatus(`SAM Encrypt: помилка: ${result && result.error ? result.error : 'невідома помилка'}`, true);
+      console.error('SAM Encrypt result:', result);
+      return;
+    }
+
+    samEncryptShowStatus('SAM Encrypt: файл зашифровано. Відкрито Finder з готовим .samenc.');
+    console.log('SAM Encrypt encrypted file:', result);
+  } catch (error) {
+    samEncryptShowStatus(`SAM Encrypt: помилка: ${error.message || error}`, true);
+    console.error('SAM Encrypt button error:', error);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.style.opacity = '1';
+    }
+  }
+}
+
+function samEncryptEnsureButton() {
+  if (!document.body) {
+    return;
+  }
+
+  if (document.getElementById(SAM_ENCRYPT_BUTTON_ID)) {
+    return;
+  }
+
+  const button = document.createElement('button');
+  button.id = SAM_ENCRYPT_BUTTON_ID;
+  button.type = 'button';
+  button.textContent = 'SAM 🔐';
+  button.title = 'SAM Encrypt: зашифрувати файл для передачі';
+  button.style.position = 'fixed';
+  button.style.left = '5px';
+  button.style.top = '292px';
+  button.style.zIndex = '2147483647';
+  button.style.width = '46px';
+  button.style.height = '34px';
+  button.style.border = '1px solid rgba(255,255,255,0.22)';
+  button.style.borderRadius = '9px';
+  button.style.background = '#202c33';
+  button.style.color = '#e9edef';
+  button.style.fontSize = '11px';
+  button.style.fontWeight = '700';
+  button.style.cursor = 'pointer';
+  button.style.boxShadow = '0 2px 8px rgba(0,0,0,0.25)';
+  button.style.userSelect = 'none';
+
+  button.addEventListener('mouseenter', () => {
+    button.style.background = '#2a3942';
+  });
+
+  button.addEventListener('mouseleave', () => {
+    button.style.background = '#202c33';
+  });
+
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    samEncryptChooseFileManualSend();
+  });
+
+  document.body.appendChild(button);
+}
+
+function samEncryptStartButton() {
+  samEncryptEnsureButton();
+
+  window.setInterval(() => {
+    samEncryptEnsureButton();
+  }, 2000);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', samEncryptStartButton, { once: true });
+} else {
+  samEncryptStartButton();
 }
 
