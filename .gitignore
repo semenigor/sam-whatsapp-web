@@ -61,3 +61,6 @@ RELEASE_NOTES_*.md
 helpers/sam_encrypt/.venv/
 helpers/sam_encrypt/**/__pycache__/
 helpers/sam_encrypt/**/*.pyc
+helpers/sam_encrypt/build/
+helpers/sam_encrypt/dist/
+helpers/sam_encrypt/*.spec

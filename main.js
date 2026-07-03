@@ -1846,6 +1846,14 @@ function getSamEncryptCliPath() {
   return path.join(getSamEncryptHelperRoot(), 'sam_encrypt_cli.py');
 }
 
+function getSamEncryptCliBinaryPath() {
+  const binaryName = process.platform === 'win32'
+    ? 'sam_encrypt_cli_bin.exe'
+    : 'sam_encrypt_cli_bin';
+
+  return path.join(getSamEncryptHelperRoot(), binaryName);
+}
+
 function getSamEncryptHomeDir() {
   return path.join(app.getPath('userData'), 'sam-encrypt');
 }
@@ -1882,15 +1890,24 @@ function runSamEncryptCli(args) {
   return new Promise((resolve) => {
     const helperRoot = getSamEncryptHelperRoot();
     const cliPath = getSamEncryptCliPath();
-    const pythonPath = getSamEncryptPythonExecutable();
+    const binaryPath = getSamEncryptCliBinaryPath();
+    const useBinary = fs.existsSync(binaryPath);
+    const executablePath = useBinary
+      ? binaryPath
+      : getSamEncryptPythonExecutable();
+    const executableArgs = useBinary
+      ? args
+      : [cliPath, ...args];
     const samHome = getSamEncryptHomeDir();
 
-    if (!fs.existsSync(cliPath)) {
+    if (!useBinary && !fs.existsSync(cliPath)) {
       resolve({
         ok: false,
         error: `SAM Encrypt CLI не знайдено: ${cliPath}`,
         helperRoot,
         cliPath,
+        binaryPath,
+        useBinary,
         samHome
       });
       return;
@@ -1898,7 +1915,7 @@ function runSamEncryptCli(args) {
 
     fs.mkdirSync(samHome, { recursive: true });
 
-    const child = spawn(pythonPath, [cliPath, ...args], {
+    const child = spawn(executablePath, executableArgs, {
       cwd: helperRoot,
       env: {
         ...process.env,
@@ -1924,7 +1941,10 @@ function runSamEncryptCli(args) {
         error: error.message,
         helperRoot,
         cliPath,
-        pythonPath,
+        binaryPath,
+        executablePath,
+        executableArgs,
+        useBinary,
         samHome,
         stdout,
         stderr
@@ -1958,7 +1978,10 @@ function runSamEncryptCli(args) {
         exitCode: code,
         helperRoot,
         cliPath,
-        pythonPath,
+        binaryPath,
+        executablePath,
+        executableArgs,
+        useBinary,
         samHome,
         stderr
       });
