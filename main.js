@@ -73,6 +73,14 @@ function setSamUnreadBadgeCount(rawCount) {
   }
 
   try {
+    if (process.platform === 'darwin' && app.dock && typeof app.dock.setBadge === 'function') {
+      app.dock.setBadge(count > 0 ? String(count) : '');
+    }
+  } catch (error) {
+    electronLog.warn('Failed to set macOS dock badge:', error);
+  }
+
+  try {
     if (process.platform === 'win32' && mainWindow && !mainWindow.isDestroyed()) {
       if (count > 0) {
         mainWindow.setOverlayIcon(createSamUnreadOverlayIcon(), `${count} unread messages`);
@@ -97,6 +105,51 @@ function setSamUnreadBadgeCount(rawCount) {
     changed: true,
     count
   };
+}
+
+
+
+function parseSamUnreadCountFromTitle(title) {
+  const text = String(title || '');
+
+  let match = text.match(/^\((\d+)\)\s*/);
+
+  if (!match) {
+    match = text.match(/\((\d+)\)\s*WhatsApp/i);
+  }
+
+  if (!match) {
+    return 0;
+  }
+
+  return normalizeSamUnreadCount(match[1]);
+}
+
+function registerSamUnreadTitleObserver(webContents) {
+  if (!webContents || webContents.__samUnreadTitleObserverRegistered) {
+    return;
+  }
+
+  webContents.__samUnreadTitleObserverRegistered = true;
+
+  const updateFromTitle = (title) => {
+    const count = parseSamUnreadCountFromTitle(title);
+    setSamUnreadBadgeCount(count);
+  };
+
+  webContents.on('page-title-updated', (_event, title) => {
+    updateFromTitle(title);
+  });
+
+  webContents.on('did-finish-load', () => {
+    webContents.executeJavaScript('document.title', true)
+      .then((title) => {
+        updateFromTitle(title);
+      })
+      .catch((error) => {
+        electronLog.warn('Failed to read WhatsApp title for unread badge:', error);
+      });
+  });
 }
 
 function registerSamUnreadBadgeIpcHandlers() {
@@ -1559,6 +1612,7 @@ function createMainWindow() {
   mainWindow.setResizable(true);
   mainWindow.setMovable(true);
   mainWindow.setMaximizable(true);
+  registerSamUnreadTitleObserver(mainWindow.webContents);
   mainWindow.setMinimizable(true);
   mainWindow.setFullScreenable(true);
   mainWindow.setMinimumSize(560, 420);
