@@ -12,7 +12,8 @@
     "dist:dir": "electron-builder --dir",
     "dist:linux": "electron-builder --linux AppImage",
     "dist:mac:dir": "electron-builder --mac dir --arm64",
-    "dist:mac": "electron-builder --mac dmg --arm64"
+    "dist:mac": "electron-builder --mac dmg --arm64",
+    "dist:win": "electron-builder --win portable --x64"
   },
   "build": {
     "appId": "com.semenigor.samwhatsappweb",
@@ -52,7 +53,18 @@
         "repo": "sam-whatsapp-web"
       }
     ],
-    "electronUpdaterCompatibility": ">=2.16"
+    "electronUpdaterCompatibility": ">=2.16",
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.${ext}"
+    }
   },
   "devDependencies": {
     "electron": "34.5.8",
