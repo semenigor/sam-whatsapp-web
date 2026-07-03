@@ -41,7 +41,8 @@
       "icon": "build/icons",
       "executableName": "sam-whatsapp-web",
       "synopsis": "WhatsApp Web Linux wrapper",
-      "description": "Electron wrapper for WhatsApp Web on Linux"
+      "description": "Electron wrapper for WhatsApp Web on Linux",
+      "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.${ext}"
     },
     "appImage": {
       "artifactName": "${productName}-${version}-${arch}.${ext}"
