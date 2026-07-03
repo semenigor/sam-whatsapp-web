@@ -2118,6 +2118,18 @@ function registerSamEncryptIpcHandlers() {
     return runSamEncryptCli(['list-contacts']);
   });
 
+  ipcMain.handle('sam-encrypt:list-groups', async () => {
+    return runSamEncryptCli(['list-groups']);
+  });
+
+  ipcMain.handle('sam-encrypt:choose-file-for-encryption', async () => {
+    return chooseFileForSamEncryption();
+  });
+
+  ipcMain.handle('sam-encrypt:choose-file-and-encrypt', async (_event, payload = {}) => {
+    return chooseFileAndEncrypt(payload);
+  });
+
   ipcMain.handle('sam-encrypt:encrypt-self', async (_event, payload = {}) => {
     if (!payload.inputPath) {
       return {
@@ -2211,6 +2223,125 @@ function getSamEncryptOutboxDir() {
   fs.mkdirSync(outboxDir, { recursive: true });
   return outboxDir;
 }
+
+async function chooseFileForSamEncryption() {
+  const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
+
+  const dialogResult = await dialog.showOpenDialog(ownerWindow, {
+    title: 'Вибрати файл для шифрування',
+    properties: ['openFile'],
+    buttonLabel: 'Далі'
+  });
+
+  if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
+    return {
+      ok: false,
+      cancelled: true,
+      error: null
+    };
+  }
+
+  return {
+    ok: true,
+    inputPath: dialogResult.filePaths[0]
+  };
+}
+
+
+async function chooseFileAndEncrypt(payload = {}) {
+  let inputPath = payload.inputPath ? String(payload.inputPath) : '';
+
+  if (!inputPath) {
+    const selected = await chooseFileForSamEncryption();
+
+    if (!selected || selected.cancelled || !selected.inputPath) {
+      return {
+        ok: false,
+        cancelled: true,
+        error: null
+      };
+    }
+
+    inputPath = selected.inputPath;
+  }
+
+  const outputDir = payload.outputDir
+    ? String(payload.outputDir)
+    : getSamEncryptOutboxDir();
+
+  const mode = String(payload.mode || 'self');
+
+  let args = [];
+
+  if (mode === 'self') {
+    args = [
+      'encrypt-self',
+      '--input',
+      inputPath,
+      '--output-dir',
+      outputDir
+    ];
+  } else if (mode === 'contact') {
+    const recipientKeyId = String(payload.recipientKeyId || '').trim();
+
+    if (!recipientKeyId) {
+      return {
+        ok: false,
+        error: 'Не задано recipientKeyId для контакту.'
+      };
+    }
+
+    args = [
+      'encrypt',
+      '--input',
+      inputPath,
+      '--output-dir',
+      outputDir,
+      '--recipient-key-id',
+      recipientKeyId
+    ];
+  } else if (mode === 'group') {
+    const groupId = String(payload.groupId || '').trim();
+
+    if (!groupId) {
+      return {
+        ok: false,
+        error: 'Не задано groupId для групи.'
+      };
+    }
+
+    args = [
+      'encrypt',
+      '--input',
+      inputPath,
+      '--output-dir',
+      outputDir,
+      '--group-id',
+      groupId
+    ];
+  } else {
+    return {
+      ok: false,
+      error: `Невідомий режим шифрування: ${mode}`
+    };
+  }
+
+  const result = await runSamEncryptCli(args);
+
+  if (result && result.ok && result.output_path && payload.revealInFolder) {
+    shell.showItemInFolder(result.output_path);
+  }
+
+  return {
+    ...result,
+    inputPath,
+    outputDir,
+    mode,
+    recipientLabel: payload.recipientLabel || null,
+    revealInFolder: Boolean(payload.revealInFolder)
+  };
+}
+
 
 async function chooseFileAndEncryptSelf(payload = {}) {
   const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;

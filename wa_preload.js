@@ -6777,6 +6777,288 @@ function samEncryptShowStatus(message, isError = false) {
   }, isError ? 7000 : 4000);
 }
 
+
+const samEncryptRecipientCache = {
+  options: null,
+  loadedAt: 0,
+  loadingPromise: null
+};
+
+const SAM_ENCRYPT_RECIPIENT_CACHE_TTL_MS = 60 * 1000;
+
+function samEncryptIsRecipientCacheFresh() {
+  return Array.isArray(samEncryptRecipientCache.options)
+    && samEncryptRecipientCache.options.length > 0
+    && Date.now() - samEncryptRecipientCache.loadedAt < SAM_ENCRYPT_RECIPIENT_CACHE_TTL_MS;
+}
+
+async function samEncryptRefreshRecipientCache(force = false) {
+  if (!force && samEncryptIsRecipientCacheFresh()) {
+    return samEncryptRecipientCache.options;
+  }
+
+  if (!force && samEncryptRecipientCache.loadingPromise) {
+    return samEncryptRecipientCache.loadingPromise;
+  }
+
+  samEncryptRecipientCache.loadingPromise = samEncryptBuildRecipientOptionsRaw()
+    .then((options) => {
+      samEncryptRecipientCache.options = Array.isArray(options) ? options : [];
+      samEncryptRecipientCache.loadedAt = Date.now();
+      return samEncryptRecipientCache.options;
+    })
+    .finally(() => {
+      samEncryptRecipientCache.loadingPromise = null;
+    });
+
+  return samEncryptRecipientCache.loadingPromise;
+}
+
+function samEncryptWarmRecipientCache() {
+  samEncryptRefreshRecipientCache(false).catch((error) => {
+    console.warn('SAM Encrypt recipient cache warmup failed:', error);
+  });
+}
+
+
+function samEncryptFormatRecipientOption(option, index) {
+  return `${index + 1}. ${option.label}`;
+}
+
+async function samEncryptBuildRecipientOptionsRaw() {
+  const options = [
+    {
+      mode: 'self',
+      label: 'Для себе',
+      recipientLabel: 'Для себе'
+    }
+  ];
+
+  let contactsResult = null;
+  let groupsResult = null;
+
+  try {
+    contactsResult = await ipcRenderer.invoke('sam-encrypt:list-contacts');
+  } catch (error) {
+    console.warn('SAM Encrypt list contacts failed:', error);
+  }
+
+  try {
+    groupsResult = await ipcRenderer.invoke('sam-encrypt:list-groups');
+  } catch (error) {
+    console.warn('SAM Encrypt list groups failed:', error);
+  }
+
+  const contacts = contactsResult && Array.isArray(contactsResult.contacts)
+    ? contactsResult.contacts
+    : [];
+
+  const groups = groupsResult && Array.isArray(groupsResult.groups)
+    ? groupsResult.groups
+    : [];
+
+  contacts.forEach((contact) => {
+    const name = String(contact.display_name || contact.key_id || '').trim();
+    const keyId = String(contact.key_id || '').trim();
+
+    if (!keyId) {
+      return;
+    }
+
+    options.push({
+      mode: 'contact',
+      label: `Контакт: ${name || keyId}`,
+      recipientLabel: name || keyId,
+      recipientKeyId: keyId
+    });
+  });
+
+  groups.forEach((group) => {
+    const name = String(group.group_name || group.group_id || '').trim();
+    const groupId = String(group.group_id || '').trim();
+    const count = Number.parseInt(String(group.member_count || 0), 10) || 0;
+
+    if (!groupId) {
+      return;
+    }
+
+    options.push({
+      mode: 'group',
+      label: `Група: ${name || groupId} (${count})`,
+      recipientLabel: name || groupId,
+      groupId
+    });
+  });
+
+  return options;
+}
+
+
+async function samEncryptBuildRecipientOptions(forceRefresh = false) {
+  return samEncryptRefreshRecipientCache(forceRefresh);
+}
+
+
+async function samEncryptChooseRecipientForManualSend() {
+  const options = await samEncryptBuildRecipientOptions();
+
+  if (!options.length) {
+    samEncryptShowStatus('SAM Encrypt: немає доступних отримувачів.', true);
+    return null;
+  }
+
+  if (!document.body) {
+    samEncryptShowStatus('SAM Encrypt: сторінка ще не готова для вибору отримувача.', true);
+    return null;
+  }
+
+  return await new Promise((resolve) => {
+    let resolved = false;
+
+    const close = (value) => {
+      if (resolved) {
+        return;
+      }
+
+      resolved = true;
+
+      document.removeEventListener('keydown', onKeyDown, true);
+
+      if (backdrop && backdrop.parentElement) {
+        backdrop.remove();
+      }
+
+      resolve(value);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        close(null);
+      }
+    };
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sam-encrypt-recipient-picker-backdrop';
+    backdrop.style.position = 'fixed';
+    backdrop.style.left = '0';
+    backdrop.style.top = '0';
+    backdrop.style.right = '0';
+    backdrop.style.bottom = '0';
+    backdrop.style.zIndex = '2147483647';
+    backdrop.style.background = 'rgba(0,0,0,0.48)';
+    backdrop.style.display = 'flex';
+    backdrop.style.alignItems = 'center';
+    backdrop.style.justifyContent = 'center';
+    backdrop.style.padding = '24px';
+    backdrop.style.boxSizing = 'border-box';
+
+    const box = document.createElement('div');
+    box.style.width = 'min(520px, calc(100vw - 48px))';
+    box.style.maxHeight = 'min(70vh, 620px)';
+    box.style.overflow = 'auto';
+    box.style.background = '#111b21';
+    box.style.color = '#e9edef';
+    box.style.border = '1px solid rgba(255,255,255,0.18)';
+    box.style.borderRadius = '14px';
+    box.style.boxShadow = '0 16px 48px rgba(0,0,0,0.45)';
+    box.style.padding = '16px';
+    box.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+
+    const title = document.createElement('div');
+    title.textContent = 'SAM Encrypt: кому зашифрувати файл?';
+    title.style.fontSize = '18px';
+    title.style.fontWeight = '700';
+    title.style.marginBottom = '12px';
+
+    const hint = document.createElement('div');
+    hint.textContent = 'Вибери отримувача. Після цього відкриється вибір файлу.';
+    hint.style.fontSize = '13px';
+    hint.style.color = '#aebac1';
+    hint.style.marginBottom = '14px';
+
+    const list = document.createElement('div');
+    list.style.display = 'flex';
+    list.style.flexDirection = 'column';
+    list.style.gap = '8px';
+
+    options.forEach((option, index) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.textContent = samEncryptFormatRecipientOption(option, index);
+      item.style.width = '100%';
+      item.style.textAlign = 'left';
+      item.style.border = '1px solid rgba(255,255,255,0.16)';
+      item.style.borderRadius = '10px';
+      item.style.background = '#202c33';
+      item.style.color = '#e9edef';
+      item.style.padding = '11px 12px';
+      item.style.fontSize = '14px';
+      item.style.fontWeight = '600';
+      item.style.cursor = 'pointer';
+
+      item.addEventListener('mouseenter', () => {
+        item.style.background = '#2a3942';
+      });
+
+      item.addEventListener('mouseleave', () => {
+        item.style.background = '#202c33';
+      });
+
+      item.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        close(option);
+      });
+
+      list.appendChild(item);
+    });
+
+    const footer = document.createElement('div');
+    footer.style.display = 'flex';
+    footer.style.justifyContent = 'flex-end';
+    footer.style.marginTop = '14px';
+
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = 'Скасувати';
+    cancel.style.border = '1px solid rgba(255,255,255,0.16)';
+    cancel.style.borderRadius = '10px';
+    cancel.style.background = 'transparent';
+    cancel.style.color = '#aebac1';
+    cancel.style.padding = '9px 12px';
+    cancel.style.fontSize = '13px';
+    cancel.style.fontWeight = '600';
+    cancel.style.cursor = 'pointer';
+
+    cancel.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      close(null);
+    });
+
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) {
+        close(null);
+      }
+    });
+
+    document.addEventListener('keydown', onKeyDown, true);
+
+    footer.appendChild(cancel);
+
+    box.appendChild(title);
+    box.appendChild(hint);
+    box.appendChild(list);
+    box.appendChild(footer);
+
+    backdrop.appendChild(box);
+    document.body.appendChild(backdrop);
+  });
+}
+
+
 async function samEncryptChooseFileManualSend() {
   const button = document.getElementById(SAM_ENCRYPT_BUTTON_ID);
 
@@ -6786,27 +7068,71 @@ async function samEncryptChooseFileManualSend() {
       button.style.opacity = '0.65';
     }
 
-    samEncryptShowStatus('SAM Encrypt: вибери файл для шифрування...');
-
-    const result = await ipcRenderer.invoke('sam-encrypt:choose-file-and-encrypt-self', {
-      revealInFolder: true
+    /*
+      Важливо для швидкості:
+      спочатку одразу відкриваємо системний вибір файлу,
+      а отримувачів догріваємо паралельно.
+    */
+    const recipientsWarmup = samEncryptRefreshRecipientCache(false).catch((error) => {
+      console.warn('SAM Encrypt recipient cache warmup failed before picker:', error);
+      return null;
     });
 
-    if (result && result.cancelled) {
+    samEncryptShowStatus('SAM Encrypt: вибери файл для шифрування...');
+
+    const fileResult = await ipcRenderer.invoke('sam-encrypt:choose-file-for-encryption');
+
+    if (fileResult && fileResult.cancelled) {
       samEncryptShowStatus('SAM Encrypt: вибір файлу скасовано.');
       return;
     }
 
+    if (!fileResult || !fileResult.ok || !fileResult.inputPath) {
+      samEncryptShowStatus(`SAM Encrypt: помилка вибору файлу: ${fileResult && fileResult.error ? fileResult.error : 'невідома помилка'}`, true);
+      console.error('SAM Encrypt file picker result:', fileResult);
+      return;
+    }
+
+    await recipientsWarmup;
+
+    samEncryptShowStatus('SAM Encrypt: вибери отримувача...');
+
+    const recipient = await samEncryptChooseRecipientForManualSend();
+
+    if (!recipient) {
+      samEncryptShowStatus('SAM Encrypt: шифрування скасовано.');
+      return;
+    }
+
+    samEncryptShowStatus(`SAM Encrypt: шифрування → ${recipient.recipientLabel || recipient.label}`);
+
+    const result = await ipcRenderer.invoke('sam-encrypt:choose-file-and-encrypt', {
+      inputPath: fileResult.inputPath,
+      mode: recipient.mode,
+      recipientKeyId: recipient.recipientKeyId || null,
+      groupId: recipient.groupId || null,
+      recipientLabel: recipient.recipientLabel || recipient.label,
+      revealInFolder: true
+    });
+
+    if (result && result.cancelled) {
+      samEncryptShowStatus('SAM Encrypt: шифрування скасовано.');
+      return;
+    }
+
     if (!result || !result.ok) {
-      samEncryptShowStatus(`SAM Encrypt: помилка: ${result && result.error ? result.error : 'невідома помилка'}`, true);
+      samEncryptShowStatus(`SAM Encrypt: помилка шифрування: ${result && result.error ? result.error : 'невідома помилка'}`, true);
       console.error('SAM Encrypt result:', result);
       return;
     }
 
-    samEncryptShowStatus('SAM Encrypt: файл зашифровано. Відкрито Finder з готовим .samenc.');
+    const target = result.recipient_name || result.recipientLabel || recipient.recipientLabel || recipient.label;
+    const count = result.recipient_count ? `, отримувачів: ${result.recipient_count}` : '';
+
+    samEncryptShowStatus(`SAM Encrypt: файл зашифровано для ${target}${count}. Відкрито Finder.`);
     console.log('SAM Encrypt encrypted file:', result);
   } catch (error) {
-    samEncryptShowStatus(`SAM Encrypt: помилка: ${error.message || error}`, true);
+    samEncryptShowStatus(`SAM Encrypt: помилка шифрування: ${error.message || error}`, true);
     console.error('SAM Encrypt button error:', error);
   } finally {
     if (button) {
@@ -6865,10 +7191,15 @@ function samEncryptEnsureButton() {
 
 function samEncryptStartButton() {
   samEncryptEnsureButton();
+  samEncryptWarmRecipientCache();
 
   window.setInterval(() => {
     samEncryptEnsureButton();
   }, 2000);
+
+  window.setInterval(() => {
+    samEncryptWarmRecipientCache();
+  }, 30000);
 }
 
 if (document.readyState === 'loading') {

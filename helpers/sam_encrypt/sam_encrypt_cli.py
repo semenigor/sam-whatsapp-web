@@ -15,7 +15,7 @@ from core.contact_repository import Contact, ContactRepository
 from core.database import init_db
 from core.file_decryptor import decrypt_file_with_my_private_key
 from core.file_encryptor import encrypt_file_for_contact, encrypt_file_for_contacts
-from core.group_service import create_local_group_file, export_group_file, import_group_file, list_group_files, save_group_file_to_local_store
+from core.group_service import create_local_group_file, export_group_file, import_group_file, list_group_files, load_group_file, save_group_file_to_local_store, validate_member
 from core.key_service import (
     export_my_public_key,
     generate_my_keypair,
@@ -280,7 +280,52 @@ def cmd_import_group(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def select_group_recipients(args: argparse.Namespace) -> list[Contact]:
+    groups = list_group_files()
+
+    if not groups:
+        raise RuntimeError("Локальні групи SAM Encrypt не знайдено.")
+
+    if args.group_id:
+        matches = [group for group in groups if group.group_id == args.group_id]
+        selector = args.group_id
+    elif args.group_name:
+        needle = args.group_name.strip().lower()
+        exact = [group for group in groups if group.group_name.strip().lower() == needle]
+        contains = [group for group in groups if needle in group.group_name.strip().lower()]
+        matches = exact or contains
+        selector = args.group_name
+    else:
+        raise RuntimeError("Не задано group_id або group_name.")
+
+    if not matches:
+        raise RuntimeError(f"Групу SAM Encrypt не знайдено: {selector}")
+
+    if len(matches) > 1:
+        names = "\n".join(f"- {group.group_name} — {group.group_id}" for group in matches)
+        raise RuntimeError(f"Знайдено кілька груп. Уточни group_id:\n{names}")
+
+    group = matches[0]
+    data = load_group_file(group.path)
+    members = data.get("members") or []
+
+    recipients: list[Contact] = []
+
+    for index, member in enumerate(members):
+        info = validate_member(member, index)
+        recipients.append(public_info_to_contact(info))
+
+    if not recipients:
+        raise RuntimeError(f"Група не має отримувачів: {group.group_name}")
+
+    return recipients
+
+
 def select_recipients(args: argparse.Namespace) -> tuple[list[Contact], bool]:
+    if getattr(args, "group_id", None) or getattr(args, "group_name", None):
+        return select_group_recipients(args), True
+
     repo = ContactRepository()
     contacts = repo.list_contacts()
 
@@ -457,6 +502,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--input", required=True)
     p.add_argument("--output-dir")
     p.add_argument("--group", action="store_true")
+    p.add_argument("--group-id")
+    p.add_argument("--group-name")
     p.add_argument("--recipient-id", type=int)
     p.add_argument("--recipient-key-id")
     p.add_argument("--recipient-name")
