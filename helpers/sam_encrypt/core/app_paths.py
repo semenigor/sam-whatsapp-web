@@ -94,6 +94,13 @@ def public_keys_dir() -> Path:
     return path
 
 
+
+def groups_dir() -> Path:
+    path = runtime_root() / "groups"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def exports_dir() -> Path:
     path = runtime_root() / "exports"
     path.mkdir(parents=True, exist_ok=True)

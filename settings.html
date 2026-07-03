@@ -222,6 +222,26 @@
       <pre id="samEncryptInfo" style="white-space:pre-wrap;background:#111827;border:1px solid #374151;border-radius:8px;padding:10px;color:#d1d5db;min-height:80px;"></pre>
 
       <div id="samEncryptContacts" style="font-size:13px;color:#d1d5db;"></div>
+
+      <div style="margin-top:14px;border-top:1px solid #374151;padding-top:12px;">
+        <div style="font-weight:700;margin-bottom:8px;">Групи</div>
+
+        <div class="row">
+          <label for="samEncryptGroupName">Назва групи</label>
+          <input type="text" id="samEncryptGroupName" value="" placeholder="Наприклад: Робоча група" style="background:#111827;color:#f9fafb;border:1px solid #4b5563;border-radius:7px;padding:7px 9px;min-width:180px;">
+        </div>
+
+        <div class="row">
+          <button id="samEncryptCreateGroup">Створити групу з вибраних контактів</button>
+          <button id="samEncryptExportSelectedGroup">Експортувати вибрану групу</button>
+        </div>
+
+        <div class="hint">
+          Для створення групи відміть контакти у списку вище. Файл .samgroup можна передати іншим учасникам.
+        </div>
+
+        <div id="samEncryptGroups" style="font-size:13px;color:#d1d5db;margin-top:8px;"></div>
+      </div>
     </fieldset>
 
     <div class="buttons">
@@ -355,23 +375,95 @@
         }
 
         for (const contact of contacts) {
-          const item = document.createElement('div');
+          const item = document.createElement('label');
+          item.style.display = 'block';
           item.style.padding = '6px 0';
           item.style.borderTop = '1px solid #374151';
 
-          const name = document.createElement('div');
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.className = 'sam-encrypt-contact-checkbox';
+          checkbox.value = contact.key_id || '';
+          checkbox.style.marginRight = '8px';
+
+          const name = document.createElement('span');
           name.style.fontWeight = '700';
           name.textContent = contact.display_name || 'Без назви';
 
           const details = document.createElement('div');
           details.className = 'hint';
+          details.style.marginLeft = '28px';
           details.textContent = `Key ID: ${contact.key_id || '-'} | Fingerprint: ${contact.fingerprint || '-'}`;
 
+          item.appendChild(checkbox);
           item.appendChild(name);
           item.appendChild(details);
           box.appendChild(item);
         }
       }
+
+      function getSelectedSamEncryptContactKeyIds() {
+        return Array.from(document.querySelectorAll('.sam-encrypt-contact-checkbox:checked'))
+          .map((item) => item.value)
+          .filter(Boolean);
+      }
+
+      function renderSamEncryptGroups(groups) {
+        const box = byId('samEncryptGroups');
+
+        if (!box) {
+          return;
+        }
+
+        box.innerHTML = '';
+
+        const title = document.createElement('div');
+        title.style.fontWeight = '700';
+        title.style.margin = '8px 0 6px';
+        title.textContent = `Локальні групи: ${Array.isArray(groups) ? groups.length : 0}`;
+        box.appendChild(title);
+
+        if (!Array.isArray(groups) || groups.length < 1) {
+          const empty = document.createElement('div');
+          empty.className = 'hint';
+          empty.textContent = 'Локальних груп поки немає.';
+          box.appendChild(empty);
+          return;
+        }
+
+        for (const group of groups) {
+          const item = document.createElement('label');
+          item.style.display = 'block';
+          item.style.padding = '6px 0';
+          item.style.borderTop = '1px solid #374151';
+
+          const radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'samEncryptSelectedGroup';
+          radio.value = group.group_id || '';
+          radio.style.marginRight = '8px';
+
+          const name = document.createElement('span');
+          name.style.fontWeight = '700';
+          name.textContent = group.group_name || 'Без назви';
+
+          const details = document.createElement('div');
+          details.className = 'hint';
+          details.style.marginLeft = '28px';
+          details.textContent = `Group ID: ${group.group_id || '-'} | Учасників: ${group.member_count || 0}`;
+
+          item.appendChild(radio);
+          item.appendChild(name);
+          item.appendChild(details);
+          box.appendChild(item);
+        }
+      }
+
+      function getSelectedSamEncryptGroupId() {
+        const selected = document.querySelector('input[name="samEncryptSelectedGroup"]:checked');
+        return selected ? selected.value : '';
+      }
+
 
       async function refreshSamEncryptStatus() {
         try {
@@ -397,6 +489,7 @@
 
           setSamEncryptInfo(lines.join('\n'));
           renderSamEncryptContacts(result.contacts || []);
+          renderSamEncryptGroups(result.groups || []);
 
           if (typeof showStatus === 'function') {
             showStatus('SAM Encrypt: статус оновлено.');
@@ -492,11 +585,74 @@
         }
       }
 
+      async function createSamEncryptGroup() {
+        const groupName = (byId('samEncryptGroupName')?.value || '').trim();
+        const memberKeyIds = getSelectedSamEncryptContactKeyIds();
+
+        try {
+          const result = await window.settingsApi.samEncryptCreateGroup({
+            groupName,
+            memberKeyIds
+          });
+
+          if (!result || !result.ok) {
+            if (typeof showStatus === 'function') {
+              showStatus(`SAM Encrypt: ${result && result.error ? result.error : 'помилка створення групи'}`, true);
+            }
+            return;
+          }
+
+          if (typeof showStatus === 'function') {
+            showStatus('SAM Encrypt: групу створено.');
+          }
+
+          await refreshSamEncryptStatus();
+        } catch (error) {
+          if (typeof showStatus === 'function') {
+            showStatus(`SAM Encrypt: ${error.message || error}`, true);
+          }
+        }
+      }
+
+      async function exportSelectedSamEncryptGroup() {
+        const groupId = getSelectedSamEncryptGroupId();
+
+        try {
+          const result = await window.settingsApi.samEncryptExportGroup({
+            groupId
+          });
+
+          if (result && result.cancelled) {
+            if (typeof showStatus === 'function') {
+              showStatus('SAM Encrypt: експорт групи скасовано.');
+            }
+            return;
+          }
+
+          if (!result || !result.ok) {
+            if (typeof showStatus === 'function') {
+              showStatus(`SAM Encrypt: ${result && result.error ? result.error : 'помилка експорту групи'}`, true);
+            }
+            return;
+          }
+
+          if (typeof showStatus === 'function') {
+            showStatus('SAM Encrypt: групу експортовано.');
+          }
+        } catch (error) {
+          if (typeof showStatus === 'function') {
+            showStatus(`SAM Encrypt: ${error.message || error}`, true);
+          }
+        }
+      }
+
       function bindSamEncryptSettings() {
         byId('samEncryptRefreshStatus')?.addEventListener('click', refreshSamEncryptStatus);
         byId('samEncryptGenerateKeys')?.addEventListener('click', generateSamEncryptKeys);
         byId('samEncryptExportPublic')?.addEventListener('click', exportSamEncryptPublic);
         byId('samEncryptImportPublic')?.addEventListener('click', importSamEncryptPublic);
+        byId('samEncryptCreateGroup')?.addEventListener('click', createSamEncryptGroup);
+        byId('samEncryptExportSelectedGroup')?.addEventListener('click', exportSelectedSamEncryptGroup);
         byId('samEncryptOpenHome')?.addEventListener('click', async () => {
           const result = await window.settingsApi.samEncryptOpenHome();
 

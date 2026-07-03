@@ -10,5 +10,7 @@ contextBridge.exposeInMainWorld('settingsApi', {
   samEncryptGenerateKeys: async (payload) => ipcRenderer.invoke('sam-encrypt-settings:generate-keys', payload || {}),
   samEncryptExportPublic: async () => ipcRenderer.invoke('sam-encrypt-settings:export-public'),
   samEncryptImportPublic: async () => ipcRenderer.invoke('sam-encrypt-settings:import-public'),
+  samEncryptCreateGroup: async (payload) => ipcRenderer.invoke('sam-encrypt-settings:create-group', payload || {}),
+  samEncryptExportGroup: async (payload) => ipcRenderer.invoke('sam-encrypt-settings:export-group', payload || {}),
   samEncryptOpenHome: async () => ipcRenderer.invoke('sam-encrypt-settings:open-home')
 });

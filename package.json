@@ -45,7 +45,7 @@
       "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.${ext}"
     },
     "appImage": {
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.${ext}"
     },
     "publish": [
       {

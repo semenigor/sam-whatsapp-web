@@ -15,7 +15,7 @@ from core.contact_repository import Contact, ContactRepository
 from core.database import init_db
 from core.file_decryptor import decrypt_file_with_my_private_key
 from core.file_encryptor import encrypt_file_for_contact, encrypt_file_for_contacts
-from core.group_service import import_group_file
+from core.group_service import create_local_group_file, export_group_file, import_group_file, list_group_files, save_group_file_to_local_store
 from core.key_service import (
     export_my_public_key,
     generate_my_keypair,
@@ -29,6 +29,17 @@ from core.key_service import (
 def print_json(data: dict) -> None:
     print(json.dumps(data, ensure_ascii=False, indent=2))
 
+
+
+def group_to_dict(group) -> dict:
+    return {
+        "group_name": group.group_name,
+        "group_id": group.group_id,
+        "member_count": group.member_count,
+        "created_utc": group.created_utc,
+        "updated_utc": group.updated_utc,
+        "path": str(group.path),
+    }
 
 def contact_to_dict(contact: Contact) -> dict:
     return {
@@ -154,6 +165,76 @@ def cmd_list_contacts(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def cmd_list_groups(args: argparse.Namespace) -> int:
+    init_db()
+    groups = list_group_files()
+
+    print_json(
+        {
+            "ok": True,
+            "groups_count": len(groups),
+            "groups": [group_to_dict(group) for group in groups],
+        }
+    )
+    return 0
+
+
+def cmd_create_group(args: argparse.Namespace) -> int:
+    init_db()
+
+    member_key_ids = [str(item).strip() for item in args.member_key_id or [] if str(item).strip()]
+
+    if not member_key_ids:
+        raise RuntimeError("Не вибрано жодного учасника групи.")
+
+    result = create_local_group_file(
+        group_name=str(args.name).strip(),
+        member_key_ids=member_key_ids,
+    )
+
+    print_json(
+        {
+            "ok": True,
+            "operation": "create-group",
+            "group_name": result.group_name,
+            "group_id": result.group_id,
+            "member_count": result.member_count,
+            "output_path": str(result.output_path),
+        }
+    )
+    return 0
+
+
+def cmd_export_group(args: argparse.Namespace) -> int:
+    init_db()
+
+    groups = list_group_files()
+    matches = [group for group in groups if group.group_id == args.group_id]
+
+    if not matches:
+        raise RuntimeError(f"Групу не знайдено: {args.group_id}")
+
+    source = matches[0].path
+    output_dir = resolve_output_dir(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    destination = output_dir / source.name
+    destination.write_bytes(source.read_bytes())
+
+    print_json(
+        {
+            "ok": True,
+            "operation": "export-group",
+            "group_name": matches[0].group_name,
+            "group_id": matches[0].group_id,
+            "member_count": matches[0].member_count,
+            "output_path": str(destination),
+        }
+    )
+    return 0
+
+
 def cmd_import_public(args: argparse.Namespace) -> int:
     init_db()
 
@@ -180,7 +261,8 @@ def cmd_import_group(args: argparse.Namespace) -> int:
     init_db()
 
     source = Path(args.file).expanduser().resolve()
-    result = import_group_file(source)
+    local_path = save_group_file_to_local_store(source)
+    result = import_group_file(local_path)
 
     print_json(
         {
@@ -192,6 +274,7 @@ def cmd_import_group(args: argparse.Namespace) -> int:
             "updated_count": result.updated_count,
             "total_members": result.total_members,
             "source_file": str(source),
+            "local_path": str(local_path),
         }
     )
     return 0
@@ -348,6 +431,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("list-contacts")
     p.set_defaults(func=cmd_list_contacts)
+
+    p = sub.add_parser("list-groups")
+    p.set_defaults(func=cmd_list_groups)
+
+    p = sub.add_parser("create-group")
+    p.add_argument("--name", required=True)
+    p.add_argument("--member-key-id", action="append", default=[])
+    p.set_defaults(func=cmd_create_group)
+
+    p = sub.add_parser("export-group")
+    p.add_argument("--group-id", required=True)
+    p.add_argument("--output-dir")
+    p.set_defaults(func=cmd_export_group)
 
     p = sub.add_parser("import-public")
     p.add_argument("--file", required=True)

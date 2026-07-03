@@ -2193,11 +2193,14 @@ function registerSamEncryptSettingsIpcHandlers() {
   ipcMain.handle('sam-encrypt-settings:status', async () => {
     const status = await runSamEncryptCli(['status']);
     const contacts = await runSamEncryptCli(['list-contacts']);
+    const groups = await runSamEncryptCli(['list-groups']);
 
     return {
       ...status,
       contacts: contacts && contacts.ok ? contacts.contacts || [] : [],
-      contacts_error: contacts && !contacts.ok ? contacts.error : null
+      contacts_error: contacts && !contacts.ok ? contacts.error : null,
+      groups: groups && groups.ok ? groups.groups || [] : [],
+      groups_error: groups && !groups.ok ? groups.error : null
     };
   });
 
@@ -2285,6 +2288,85 @@ function registerSamEncryptSettingsIpcHandlers() {
       '--file',
       dialogResult.filePaths[0]
     ]);
+  });
+
+  ipcMain.handle('sam-encrypt-settings:create-group', async (_event, payload = {}) => {
+    const groupName = String(payload.groupName || '').trim();
+    const memberKeyIds = Array.isArray(payload.memberKeyIds)
+      ? payload.memberKeyIds.map((item) => String(item).trim()).filter(Boolean)
+      : [];
+
+    if (!groupName) {
+      return {
+        ok: false,
+        error: 'Не задано назву групи.'
+      };
+    }
+
+    if (memberKeyIds.length < 1) {
+      return {
+        ok: false,
+        error: 'Не вибрано учасників групи.'
+      };
+    }
+
+    const args = [
+      'create-group',
+      '--name',
+      groupName
+    ];
+
+    for (const keyId of memberKeyIds) {
+      args.push('--member-key-id', keyId);
+    }
+
+    return runSamEncryptCli(args);
+  });
+
+  ipcMain.handle('sam-encrypt-settings:export-group', async (_event, payload = {}) => {
+    const groupId = String(payload.groupId || '').trim();
+
+    if (!groupId) {
+      return {
+        ok: false,
+        error: 'Не вибрано групу для експорту.'
+      };
+    }
+
+    const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
+
+    const dialogResult = await dialog.showOpenDialog(ownerWindow, {
+      title: 'Вибрати папку для експорту групи .samgroup',
+      properties: ['openDirectory', 'createDirectory'],
+      buttonLabel: 'Експортувати'
+    });
+
+    if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
+      return {
+        ok: false,
+        cancelled: true,
+        error: null
+      };
+    }
+
+    const outputDir = dialogResult.filePaths[0];
+
+    const result = await runSamEncryptCli([
+      'export-group',
+      '--group-id',
+      groupId,
+      '--output-dir',
+      outputDir
+    ]);
+
+    if (result && result.ok && result.output_path) {
+      shell.showItemInFolder(result.output_path);
+    }
+
+    return {
+      ...result,
+      outputDir
+    };
   });
 
   ipcMain.handle('sam-encrypt-settings:open-home', async () => {

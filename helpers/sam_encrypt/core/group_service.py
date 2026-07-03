@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from core.app_paths import exports_dir
+from core.app_paths import exports_dir, groups_dir
 from core.contact_repository import ContactRepository
 from core.key_service import (
     ALGORITHM,
@@ -22,6 +22,16 @@ from core.key_service import (
 
 GROUP_FORMAT = "sam-encrypt-group"
 GROUP_VERSION = 1
+
+
+@dataclass(frozen=True)
+class GroupInfo:
+    group_name: str
+    group_id: str
+    member_count: int
+    created_utc: str
+    updated_utc: str
+    path: Path
 
 
 @dataclass(frozen=True)
@@ -147,7 +157,7 @@ def load_group_file(path: Path) -> dict[str, Any]:
     return data
 
 
-def export_group_file(group_name: str, destination_dir: Path | None = None) -> GroupExportResult:
+def export_group_file(group_name: str, destination_dir: Path | None = None, member_key_ids: list[str] | None = None) -> GroupExportResult:
     group_name = group_name.strip()
 
     if not group_name:
@@ -155,6 +165,14 @@ def export_group_file(group_name: str, destination_dir: Path | None = None) -> G
 
     repository = ContactRepository()
     contacts = repository.list_contacts()
+
+    if member_key_ids:
+        wanted = {str(item) for item in member_key_ids}
+        contacts = [contact for contact in contacts if contact.key_id in wanted]
+
+        missing = sorted(wanted - {contact.key_id for contact in contacts})
+        if missing:
+            raise RuntimeError("Не знайдено контакти для group key_id: " + ", ".join(missing))
 
     if not contacts:
         raise RuntimeError("Неможливо експортувати групу: список контактів порожній.")
@@ -239,3 +257,55 @@ def import_group_file(path: Path) -> GroupImportResult:
         updated_count=updated_count,
         total_members=len(members),
     )
+
+
+def group_info_from_file(path: Path) -> GroupInfo:
+    data = load_group_file(path)
+
+    return GroupInfo(
+        group_name=str(data["group_name"]),
+        group_id=str(data["group_id"]),
+        member_count=int(data.get("member_count") or len(data.get("members") or [])),
+        created_utc=str(data.get("created_utc") or ""),
+        updated_utc=str(data.get("updated_utc") or ""),
+        path=path,
+    )
+
+
+def list_group_files() -> list[GroupInfo]:
+    result: list[GroupInfo] = []
+
+    for path in sorted(groups_dir().glob("*.samgroup")):
+        try:
+            result.append(group_info_from_file(path))
+        except Exception:
+            continue
+
+    result.sort(key=lambda item: (item.group_name.lower(), item.group_id))
+    return result
+
+
+def save_group_file_to_local_store(source_path: Path) -> Path:
+    data = load_group_file(source_path)
+
+    safe_group_name = normalize_filename_part(str(data["group_name"]))
+    group_id = str(data["group_id"])
+    destination = groups_dir() / f"{safe_group_name}_{group_id}.samgroup"
+
+    try:
+        with destination.open("w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+    except OSError as exc:
+        raise RuntimeError(f"Не вдалося зберегти .samgroup локально: {exc}") from exc
+
+    return destination
+
+
+def create_local_group_file(group_name: str, member_key_ids: list[str]) -> GroupExportResult:
+    return export_group_file(
+        group_name=group_name,
+        destination_dir=groups_dir(),
+        member_key_ids=member_key_ids,
+    )
+
