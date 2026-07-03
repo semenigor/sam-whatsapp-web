@@ -12,5 +12,10 @@ contextBridge.exposeInMainWorld('settingsApi', {
   samEncryptImportPublic: async () => ipcRenderer.invoke('sam-encrypt-settings:import-public'),
   samEncryptCreateGroup: async (payload) => ipcRenderer.invoke('sam-encrypt-settings:create-group', payload || {}),
   samEncryptExportGroup: async (payload) => ipcRenderer.invoke('sam-encrypt-settings:export-group', payload || {}),
-  samEncryptOpenHome: async () => ipcRenderer.invoke('sam-encrypt-settings:open-home')
+  samEncryptOpenHome: async () => ipcRenderer.invoke('sam-encrypt-settings:open-home'),
+  samEncryptListGroups: async () => ipcRenderer.invoke('sam-encrypt-settings:list-groups'),
+  samEncryptImportGroup: async () => ipcRenderer.invoke('sam-encrypt-settings:import-group'),
+  samEncryptDeleteContact: async (payload) => ipcRenderer.invoke('sam-encrypt-settings:delete-contact', payload || {}),
+  samEncryptDeleteGroup: async (payload) => ipcRenderer.invoke('sam-encrypt-settings:delete-group', payload || {})
+
 });

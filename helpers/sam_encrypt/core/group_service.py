@@ -285,23 +285,88 @@ def list_group_files() -> list[GroupInfo]:
     return result
 
 
+def delete_group_file(group_id: str) -> int:
+    group_id = str(group_id or "").strip()
+
+    if not group_id:
+        raise ValueError("group_id не може бути порожнім.")
+
+    removed = 0
+
+    for group in list_group_files():
+        if group.group_id != group_id:
+            continue
+
+        path = Path(group.path)
+
+        try:
+            if path.exists():
+                path.unlink()
+                removed += 1
+        except OSError as exc:
+            raise RuntimeError(f"Не вдалося видалити групу {group_id}: {exc}") from exc
+
+    if removed < 1:
+        raise RuntimeError(f"Групу не знайдено: {group_id}")
+
+    return removed
+
+
 def save_group_file_to_local_store(source_path: Path) -> Path:
     data = load_group_file(source_path)
 
-    safe_group_name = normalize_filename_part(str(data["group_name"]))
+    group_name = str(data["group_name"])
     group_id = str(data["group_id"])
-    destination = groups_dir() / f"{safe_group_name}_{group_id}.samgroup"
+
+    out_dir = groups_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_group_name = normalize_filename_part(group_name)
+    output_path = out_dir / f"sam_group_{safe_group_name}_{group_id}.samgroup"
+
+    source_resolved = source_path.resolve()
+    output_resolved = output_path.resolve()
+
+    # При повторному імпорті тієї самої групи не створюємо дубль.
+    # Видаляємо всі локальні .samgroup з таким самим group_id, крім цільового файлу
+    # і крім source-файлу, якщо користувач імпортує прямо з локального groups dir.
+    for candidate in out_dir.glob("*.samgroup"):
+        try:
+            candidate_resolved = candidate.resolve()
+        except OSError:
+            continue
+
+        if candidate_resolved == output_resolved or candidate_resolved == source_resolved:
+            continue
+
+        try:
+            candidate_data = load_group_file(candidate)
+        except RuntimeError:
+            continue
+
+        if str(candidate_data.get("group_id", "")).strip() == group_id:
+            try:
+                candidate.unlink()
+            except OSError as exc:
+                raise RuntimeError(f"Не вдалося видалити дубль групи {candidate}: {exc}") from exc
 
     try:
-        with destination.open("w", encoding="utf-8") as fh:
+        with output_path.open("w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
             fh.write("\n")
     except OSError as exc:
-        raise RuntimeError(f"Не вдалося зберегти .samgroup локально: {exc}") from exc
+        raise RuntimeError(f"Не вдалося зберегти локальний .samgroup: {exc}") from exc
 
-    return destination
+    # Якщо імпорт ішов з іншого локального файлу groups dir з тим самим group_id,
+    # після успішного запису прибираємо і його.
+    if source_resolved != output_resolved and source_path.parent.resolve() == out_dir.resolve():
+        try:
+            if source_path.exists():
+                source_path.unlink()
+        except OSError as exc:
+            raise RuntimeError(f"Не вдалося видалити старий локальний .samgroup: {exc}") from exc
 
-
+    return output_path
 def create_local_group_file(group_name: str, member_key_ids: list[str]) -> GroupExportResult:
     return export_group_file(
         group_name=group_name,

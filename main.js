@@ -2118,6 +2118,47 @@ function registerSamEncryptIpcHandlers() {
     return runSamEncryptCli(['list-contacts']);
   });
 
+  ipcMain.handle('sam-encrypt-settings:list-groups', async () => {
+    return runSamEncryptCli(['list-groups']);
+  });
+
+  ipcMain.handle('sam-encrypt-settings:import-group', async () => {
+    return chooseSamEncryptGroupFileAndImport();
+  });
+
+  ipcMain.handle('sam-encrypt-settings:delete-contact', async (_event, payload = {}) => {
+    const contactId = Number.parseInt(String(payload.contactId || payload.id || ''), 10);
+    const keyId = String(payload.keyId || '').trim();
+
+    const args = ['delete-contact'];
+
+    if (Number.isInteger(contactId) && contactId > 0) {
+      args.push('--id', String(contactId));
+    } else if (keyId) {
+      args.push('--key-id', keyId);
+    } else {
+      return {
+        ok: false,
+        error: 'Не задано contactId або keyId.'
+      };
+    }
+
+    return runSamEncryptCli(args);
+  });
+
+  ipcMain.handle('sam-encrypt-settings:delete-group', async (_event, payload = {}) => {
+    const groupId = String(payload.groupId || '').trim();
+
+    if (!groupId) {
+      return {
+        ok: false,
+        error: 'Не задано groupId.'
+      };
+    }
+
+    return runSamEncryptCli(['delete-group', '--group-id', groupId]);
+  });
+
   ipcMain.handle('sam-encrypt:list-groups', async () => {
     return runSamEncryptCli(['list-groups']);
   });
@@ -2217,6 +2258,61 @@ function ensureStandardEditMenuForClipboard() {
   currentMenu.insert(insertIndex, editMenu);
   Menu.setApplicationMenu(currentMenu);
 }
+
+async function chooseSamEncryptGroupFileAndImport() {
+  const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
+
+  const dialogResult = await dialog.showOpenDialog(ownerWindow, {
+    title: 'Імпорт групи SAM Encrypt',
+    properties: ['openFile'],
+    buttonLabel: 'Імпортувати групу',
+    filters: [
+      {
+        name: 'SAM Encrypt group',
+        extensions: ['samgroup']
+      },
+      {
+        name: 'All files',
+        extensions: ['*']
+      }
+    ]
+  });
+
+  if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
+    return {
+      ok: false,
+      cancelled: true,
+      error: null
+    };
+  }
+
+  const inputPath = dialogResult.filePaths[0];
+
+  const result = await runSamEncryptCli([
+    'import-group',
+    '--file',
+    inputPath
+  ]);
+
+  if (!result || !result.ok) {
+    return {
+      ...(result || {}),
+      ok: false,
+      inputPath
+    };
+  }
+
+  const groupsResult = await runSamEncryptCli(['list-groups']);
+
+  return {
+    ...result,
+    inputPath,
+    groups: groupsResult && groupsResult.ok && Array.isArray(groupsResult.groups)
+      ? groupsResult.groups
+      : []
+  };
+}
+
 
 function getSamEncryptOutboxDir() {
   const outboxDir = path.join(getSamEncryptHomeDir(), 'outbox');

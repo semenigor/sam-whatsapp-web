@@ -244,6 +244,21 @@
       </div>
     </fieldset>
 
+    <fieldset>
+      <legend>SAM Encrypt: групи</legend>
+
+      <div class="row">
+        <button id="samEncryptImportGroup" type="button">Імпорт групи .samgroup</button>
+        <button id="samEncryptRefreshGroups" type="button">Оновити список груп</button>
+      </div>
+
+      <div class="hint">
+        Імпортована група зʼявиться у виборі отримувача кнопки SAM 🔐.
+      </div>
+
+      <pre id="samEncryptGroupsInfo" style="white-space:pre-wrap;background:#111827;border:1px solid #374151;border-radius:8px;padding:10px;color:#d1d5db;min-height:80px;margin-top:10px;"></pre>
+    </fieldset>
+
     <div class="buttons">
       <button id="reload">Перечитати</button>
       <button class="primary" id="save">Зберегти</button>
@@ -331,7 +346,116 @@
       await window.settingsApi.openPreviewCache();
     });
 
+
+    function formatSamEncryptGroups(result) {
+      if (!result || !result.ok) {
+        return `Помилка: ${result && result.error ? result.error : 'невідома помилка'}`;
+      }
+
+      const groups = Array.isArray(result.groups) ? result.groups : [];
+
+      if (!groups.length) {
+        return 'Локальних груп SAM Encrypt поки немає.';
+      }
+
+      return groups.map((group, index) => {
+        const name = group.group_name || '(без назви)';
+        const id = group.group_id || '(без group_id)';
+        const count = group.member_count ?? group.total_members ?? '?';
+
+        return `${index + 1}. ${name}
+   group_id: ${id}
+   учасників: ${count}`;
+      }).join('\n\n');
+    }
+
+    async function refreshSamEncryptGroups() {
+      const output = document.getElementById('samEncryptGroupsInfo');
+
+      if (!output || !window.settingsApi || !window.settingsApi.samEncryptListGroups) {
+        return;
+      }
+
+      try {
+        output.textContent = 'Завантажую список груп...';
+        const result = await window.settingsApi.samEncryptListGroups();
+        output.textContent = formatSamEncryptGroups(result);
+      } catch (error) {
+        output.textContent = `Помилка: ${error.message || error}`;
+      }
+    }
+
+    async function importSamEncryptGroup() {
+      const output = document.getElementById('samEncryptGroupsInfo');
+
+      try {
+        if (output) {
+          output.textContent = 'Вибери .samgroup файл...';
+        }
+
+        const result = await window.settingsApi.samEncryptImportGroup();
+
+        if (result && result.cancelled) {
+          if (output) {
+            output.textContent = 'Імпорт групи скасовано.';
+          }
+          showStatus('Імпорт групи скасовано.');
+          return;
+        }
+
+        if (!result || !result.ok) {
+          const message = result && result.error ? result.error : 'невідома помилка';
+          if (output) {
+            output.textContent = `Помилка імпорту групи: ${message}`;
+          }
+          showStatus(`Помилка імпорту групи: ${message}`, true);
+          return;
+        }
+
+        const text = [
+          `Групу імпортовано: ${result.group_name || '(без назви)'}`,
+          `group_id: ${result.group_id || ''}`,
+          `учасників у групі: ${result.total_members ?? '?'}`,
+          `імпортовано контактів: ${result.imported_count ?? 0}`,
+          `оновлено контактів: ${result.updated_count ?? 0}`,
+          '',
+          'Поточні локальні групи:',
+          formatSamEncryptGroups({
+            ok: true,
+            groups: result.groups || []
+          })
+        ].join('\n');
+
+        if (output) {
+          output.textContent = text;
+        }
+
+        showStatus('Групу SAM Encrypt імпортовано.');
+      } catch (error) {
+        const message = error.message || String(error);
+
+        if (output) {
+          output.textContent = `Помилка імпорту групи: ${message}`;
+        }
+
+        showStatus(`Помилка імпорту групи: ${message}`, true);
+      }
+    }
+
+    const samEncryptImportGroupButton = document.getElementById('samEncryptImportGroup');
+    const samEncryptRefreshGroupsButton = document.getElementById('samEncryptRefreshGroups');
+
+    if (samEncryptImportGroupButton) {
+      samEncryptImportGroupButton.addEventListener('click', importSamEncryptGroup);
+    }
+
+    if (samEncryptRefreshGroupsButton) {
+      samEncryptRefreshGroupsButton.addEventListener('click', refreshSamEncryptGroups);
+    }
+
+
     loadSettings();
+    refreshSamEncryptGroups();
   </script>
 
   <script>
@@ -350,6 +474,85 @@
           box.textContent = text;
         }
       }
+
+      async function deleteSamEncryptContact(contact) {
+        if (!contact) {
+          return;
+        }
+
+        const name = contact.display_name || contact.key_id || 'контакт';
+        const keyId = contact.key_id || '';
+        const id = contact.id;
+
+        const confirmed = window.confirm(`Видалити контакт SAM Encrypt?\n\n${name}\n${keyId}\n\nГрупи не будуть видалені.`);
+
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          const result = await window.settingsApi.samEncryptDeleteContact({
+            contactId: id,
+            keyId
+          });
+
+          if (!result || !result.ok) {
+            showStatus(`SAM Encrypt: ${result && result.error ? result.error : 'не вдалося видалити контакт'}`, true);
+            return;
+          }
+
+          showStatus('SAM Encrypt: контакт видалено.');
+
+          if (typeof refreshSamEncryptStatus === 'function') {
+            await refreshSamEncryptStatus(false);
+          }
+
+          if (typeof refreshSamEncryptGroups === 'function') {
+            await refreshSamEncryptGroups();
+          }
+        } catch (error) {
+          showStatus(`SAM Encrypt: ${error.message || error}`, true);
+        }
+      }
+
+      async function deleteSamEncryptGroup(group) {
+        if (!group) {
+          return;
+        }
+
+        const name = group.group_name || 'група';
+        const groupId = group.group_id || '';
+
+        const confirmed = window.confirm(`Видалити групу SAM Encrypt?\n\n${name}\n${groupId}\n\nКонтакти не будуть видалені.`);
+
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          const result = await window.settingsApi.samEncryptDeleteGroup({
+            groupId
+          });
+
+          if (!result || !result.ok) {
+            showStatus(`SAM Encrypt: ${result && result.error ? result.error : 'не вдалося видалити групу'}`, true);
+            return;
+          }
+
+          showStatus('SAM Encrypt: групу видалено.');
+
+          if (typeof refreshSamEncryptStatus === 'function') {
+            await refreshSamEncryptStatus(false);
+          }
+
+          if (typeof refreshSamEncryptGroups === 'function') {
+            await refreshSamEncryptGroups();
+          }
+        } catch (error) {
+          showStatus(`SAM Encrypt: ${error.message || error}`, true);
+        }
+      }
+
 
       function renderSamEncryptContacts(contacts) {
         const box = byId('samEncryptContacts');
@@ -376,9 +579,14 @@
 
         for (const contact of contacts) {
           const item = document.createElement('label');
-          item.style.display = 'block';
+          item.style.display = 'grid';
+          item.style.gridTemplateColumns = '1fr 30px';
+          item.style.columnGap = '8px';
+          item.style.alignItems = 'center';
           item.style.padding = '6px 0';
           item.style.borderTop = '1px solid #374151';
+
+          const content = document.createElement('div');
 
           const checkbox = document.createElement('input');
           checkbox.type = 'checkbox';
@@ -395,9 +603,36 @@
           details.style.marginLeft = '28px';
           details.textContent = `Key ID: ${contact.key_id || '-'} | Fingerprint: ${contact.fingerprint || '-'}`;
 
-          item.appendChild(checkbox);
-          item.appendChild(name);
-          item.appendChild(details);
+          const deleteButton = document.createElement('button');
+          deleteButton.type = 'button';
+          deleteButton.textContent = '🗑';
+          deleteButton.title = 'Видалити контакт';
+          deleteButton.setAttribute('aria-label', 'Видалити контакт');
+          deleteButton.style.width = '26px';
+          deleteButton.style.height = '26px';
+          deleteButton.style.border = '1px solid #7f1d1d';
+          deleteButton.style.borderRadius = '7px';
+          deleteButton.style.background = '#450a0a';
+          deleteButton.style.color = '#fecaca';
+          deleteButton.style.padding = '0';
+          deleteButton.style.cursor = 'pointer';
+          deleteButton.style.fontSize = '13px';
+          deleteButton.style.lineHeight = '24px';
+          deleteButton.style.textAlign = 'center';
+
+          deleteButton.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            await deleteSamEncryptContact(contact);
+          });
+
+          content.appendChild(checkbox);
+          content.appendChild(name);
+          content.appendChild(details);
+
+          item.appendChild(content);
+          item.appendChild(deleteButton);
           box.appendChild(item);
         }
       }
@@ -433,9 +668,14 @@
 
         for (const group of groups) {
           const item = document.createElement('label');
-          item.style.display = 'block';
+          item.style.display = 'grid';
+          item.style.gridTemplateColumns = '1fr 30px';
+          item.style.columnGap = '8px';
+          item.style.alignItems = 'center';
           item.style.padding = '6px 0';
           item.style.borderTop = '1px solid #374151';
+
+          const content = document.createElement('div');
 
           const radio = document.createElement('input');
           radio.type = 'radio';
@@ -452,9 +692,36 @@
           details.style.marginLeft = '28px';
           details.textContent = `Group ID: ${group.group_id || '-'} | Учасників: ${group.member_count || 0}`;
 
-          item.appendChild(radio);
-          item.appendChild(name);
-          item.appendChild(details);
+          const deleteButton = document.createElement('button');
+          deleteButton.type = 'button';
+          deleteButton.textContent = '🗑';
+          deleteButton.title = 'Видалити групу';
+          deleteButton.setAttribute('aria-label', 'Видалити групу');
+          deleteButton.style.width = '26px';
+          deleteButton.style.height = '26px';
+          deleteButton.style.border = '1px solid #7f1d1d';
+          deleteButton.style.borderRadius = '7px';
+          deleteButton.style.background = '#450a0a';
+          deleteButton.style.color = '#fecaca';
+          deleteButton.style.padding = '0';
+          deleteButton.style.cursor = 'pointer';
+          deleteButton.style.fontSize = '13px';
+          deleteButton.style.lineHeight = '24px';
+          deleteButton.style.textAlign = 'center';
+
+          deleteButton.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            await deleteSamEncryptGroup(group);
+          });
+
+          content.appendChild(radio);
+          content.appendChild(name);
+          content.appendChild(details);
+
+          item.appendChild(content);
+          item.appendChild(deleteButton);
           box.appendChild(item);
         }
       }

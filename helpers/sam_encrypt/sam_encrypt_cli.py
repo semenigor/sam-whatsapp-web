@@ -15,7 +15,7 @@ from core.contact_repository import Contact, ContactRepository
 from core.database import init_db
 from core.file_decryptor import decrypt_file_with_my_private_key
 from core.file_encryptor import encrypt_file_for_contact, encrypt_file_for_contacts
-from core.group_service import create_local_group_file, export_group_file, import_group_file, list_group_files, load_group_file, save_group_file_to_local_store, validate_member
+from core.group_service import create_local_group_file, delete_group_file, export_group_file, import_group_file, list_group_files, load_group_file, save_group_file_to_local_store, validate_member
 from core.key_service import (
     export_my_public_key,
     generate_my_keypair,
@@ -164,6 +164,54 @@ def cmd_list_contacts(args: argparse.Namespace) -> int:
     )
     return 0
 
+
+
+def cmd_delete_contact(args: argparse.Namespace) -> int:
+    repository = ContactRepository()
+    contacts = repository.list_contacts()
+
+    target = None
+
+    if args.id is not None:
+        matches = [contact for contact in contacts if contact.id == int(args.id)]
+        target = matches[0] if matches else None
+    elif args.key_id:
+        matches = [contact for contact in contacts if contact.key_id == str(args.key_id).strip()]
+        target = matches[0] if matches else None
+    else:
+        raise RuntimeError("Не задано --id або --key-id.")
+
+    if target is None:
+        raise RuntimeError("Контакт не знайдено.")
+
+    repository.delete_contact(target.id)
+
+    print_json(
+        {
+            "ok": True,
+            "operation": "delete-contact",
+            "id": target.id,
+            "display_name": target.display_name,
+            "key_id": target.key_id,
+        }
+    )
+
+    return 0
+
+
+def cmd_delete_group(args: argparse.Namespace) -> int:
+    removed = delete_group_file(args.group_id)
+
+    print_json(
+        {
+            "ok": True,
+            "operation": "delete-group",
+            "group_id": args.group_id,
+            "removed_count": removed,
+        }
+    )
+
+    return 0
 
 
 def cmd_list_groups(args: argparse.Namespace) -> int:
@@ -479,6 +527,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("list-groups")
     p.set_defaults(func=cmd_list_groups)
+
+    p = sub.add_parser("delete-contact")
+    p.add_argument("--id", type=int)
+    p.add_argument("--key-id")
+    p.set_defaults(func=cmd_delete_contact)
+
+    p = sub.add_parser("delete-group")
+    p.add_argument("--group-id", required=True)
+    p.set_defaults(func=cmd_delete_group)
 
     p = sub.add_parser("create-group")
     p.add_argument("--name", required=True)
