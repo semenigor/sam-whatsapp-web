@@ -9,7 +9,10 @@
   "scripts": {
     "dev": "electron .",
     "dist": "electron-builder --linux AppImage",
-    "dist:dir": "electron-builder --dir"
+    "dist:dir": "electron-builder --dir",
+    "dist:linux": "electron-builder --linux AppImage",
+    "dist:mac:dir": "electron-builder --mac dir --arm64",
+    "dist:mac": "electron-builder --mac dmg --arm64"
   },
   "build": {
     "appId": "com.semenigor.samwhatsappweb",

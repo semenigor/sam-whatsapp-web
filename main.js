@@ -1707,6 +1707,14 @@ function registerNotesIpcHandlers() {
 }
 
 function setupAutoUpdater() {
+  // Поки GitHub Release містить тільки Linux AppImage.
+  // На macOS electron-updater шукає latest-mac.yml і показує 404.
+  if (process.platform !== 'linux') {
+    electronLog.info(`Auto-update disabled on platform: ${process.platform}`);
+    return;
+  }
+
+
   if (!app.isPackaged) {
     return;
   }
