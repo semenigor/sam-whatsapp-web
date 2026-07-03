@@ -1469,6 +1469,12 @@ function configureSession() {
           return;
         }
 
+        const samEncryptDownloadResult = await handleSamEncryptDownloadedFile(savePath);
+
+        if (samEncryptDownloadResult && samEncryptDownloadResult.handled) {
+          return;
+        }
+
         if (isOfficeDocument(savePath)) {
           cleanupCachesBySettings();
 
@@ -1492,6 +1498,89 @@ function configureSession() {
       dialog.showErrorBox('Помилка завантаження', String(error));
     }
   });
+}
+
+
+function isSamEncryptDownloadFile(filePath) {
+  return path.extname(String(filePath || '')).toLowerCase() === '.samenc';
+}
+
+function getSamEncryptDecryptedDir() {
+  const decryptedDir = path.join(getSamEncryptHomeDir(), 'decrypted');
+  fs.mkdirSync(decryptedDir, { recursive: true });
+  return decryptedDir;
+}
+
+async function handleSamEncryptDownloadedFile(filePath) {
+  if (!isSamEncryptDownloadFile(filePath)) {
+    return {
+      handled: false
+    };
+  }
+
+  const inputPath = String(filePath || '');
+
+  if (!inputPath || !fs.existsSync(inputPath)) {
+    return {
+      handled: true,
+      ok: false,
+      error: `SAM Encrypt файл не знайдено: ${inputPath}`
+    };
+  }
+
+  const outputDir = getSamEncryptDecryptedDir();
+
+  const result = await runSamEncryptCli([
+    'decrypt',
+    '--input',
+    inputPath,
+    '--output-dir',
+    outputDir
+  ]);
+
+  if (!result || !result.ok) {
+    const message = result && result.error
+      ? result.error
+      : 'невідома помилка розшифрування';
+
+    await dialog.showMessageBox({
+      type: 'error',
+      title: getAppWindowTitle(),
+      message: 'Не вдалося автоматично розшифрувати SAM Encrypt файл',
+      detail: `${message}\n\nЗавантажений файл:\n${inputPath}`,
+      buttons: ['Показати .samenc', 'OK'],
+      defaultId: 0,
+      cancelId: 1
+    }).then((response) => {
+      if (response.response === 0) {
+        shell.showItemInFolder(inputPath);
+      }
+    });
+
+    return {
+      handled: true,
+      ok: false,
+      error: message,
+      inputPath
+    };
+  }
+
+  const outputPath = result.output_path || result.outputPath || result.file_path || result.filePath || null;
+
+  if (outputPath && fs.existsSync(outputPath)) {
+    shell.showItemInFolder(outputPath);
+  } else {
+    shell.showItemInFolder(outputDir);
+  }
+
+  return {
+    handled: true,
+    ok: true,
+    inputPath,
+    outputDir,
+    outputPath,
+    result
+  };
 }
 
 
