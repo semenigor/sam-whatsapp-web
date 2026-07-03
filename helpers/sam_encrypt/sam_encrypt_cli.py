@@ -17,6 +17,8 @@ from core.file_decryptor import decrypt_file_with_my_private_key
 from core.file_encryptor import encrypt_file_for_contact, encrypt_file_for_contacts
 from core.group_service import import_group_file
 from core.key_service import (
+    export_my_public_key,
+    generate_my_keypair,
     load_my_public_key_info_with_repair,
     load_public_key_file,
     private_key_exists,
@@ -40,6 +42,20 @@ def contact_to_dict(contact: Contact) -> dict:
         "updated_utc": contact.updated_utc,
     }
 
+
+
+def key_info_to_dict(info) -> dict | None:
+    if info is None:
+        return None
+
+    return {
+        "owner_name": getattr(info, "owner_name", None),
+        "key_id": getattr(info, "key_id", None),
+        "fingerprint": getattr(info, "fingerprint", None),
+        "algorithm": getattr(info, "algorithm", None),
+        "created_utc": getattr(info, "created_utc", None),
+        "public_key_b64": getattr(info, "public_key_b64", None),
+    }
 
 def public_info_to_contact(info) -> Contact:
     return Contact(
@@ -65,13 +81,60 @@ def cmd_status(args: argparse.Namespace) -> int:
     init_db()
     contacts = ContactRepository().list_contacts()
 
+    public_info = None
+    public_info_error = None
+
+    if public_key_exists():
+        try:
+            public_info = load_my_public_key_info_with_repair()
+        except Exception as exc:
+            public_info_error = str(exc)
+
     print_json(
         {
             "ok": True,
             "private_key_exists": private_key_exists(),
             "public_key_exists": public_key_exists(),
+            "my_public_key": key_info_to_dict(public_info),
+            "my_public_key_error": public_info_error,
             "contacts_count": len(contacts),
             "exports_dir": str(exports_dir()),
+        }
+    )
+    return 0
+
+
+def cmd_generate_my_keys(args: argparse.Namespace) -> int:
+    init_db()
+
+    info = generate_my_keypair(
+        owner_name=str(args.owner_name).strip() or "SAM",
+        overwrite=bool(args.overwrite),
+    )
+
+    print_json(
+        {
+            "ok": True,
+            "operation": "generate-my-keys",
+            "private_key_exists": private_key_exists(),
+            "public_key_exists": public_key_exists(),
+            "my_key": key_info_to_dict(info),
+        }
+    )
+    return 0
+
+
+def cmd_export_public(args: argparse.Namespace) -> int:
+    init_db()
+
+    output_dir = resolve_output_dir(args.output_dir)
+    output_path = export_my_public_key(output_dir)
+
+    print_json(
+        {
+            "ok": True,
+            "operation": "export-public",
+            "output_path": str(output_path),
         }
     )
     return 0
@@ -273,6 +336,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("status")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("generate-my-keys")
+    p.add_argument("--owner-name", required=True)
+    p.add_argument("--overwrite", action="store_true")
+    p.set_defaults(func=cmd_generate_my_keys)
+
+    p = sub.add_parser("export-public")
+    p.add_argument("--output-dir")
+    p.set_defaults(func=cmd_export_public)
 
     p = sub.add_parser("list-contacts")
     p.set_defaults(func=cmd_list_contacts)

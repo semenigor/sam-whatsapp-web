@@ -198,6 +198,32 @@
       </div>
     </fieldset>
 
+
+    <fieldset id="samEncryptSettingsFieldset">
+      <legend>SAM Encrypt</legend>
+
+      <div class="row">
+        <label for="samEncryptOwnerName">Імʼя власника ключів</label>
+        <input type="text" id="samEncryptOwnerName" value="SAM" style="background:#111827;color:#f9fafb;border:1px solid #4b5563;border-radius:7px;padding:7px 9px;min-width:180px;">
+      </div>
+
+      <div class="row">
+        <button id="samEncryptRefreshStatus">Оновити статус</button>
+        <button id="samEncryptGenerateKeys">Створити мої ключі</button>
+        <button id="samEncryptExportPublic">Експортувати публічний ключ</button>
+        <button id="samEncryptImportPublic">Імпортувати публічний ключ</button>
+        <button id="samEncryptOpenHome">Відкрити папку SAM Encrypt</button>
+      </div>
+
+      <div class="hint">
+        Приватний ключ залишається тільки на цьому компʼютері. Іншим користувачам передається тільки публічний ключ .sampub.
+      </div>
+
+      <pre id="samEncryptInfo" style="white-space:pre-wrap;background:#111827;border:1px solid #374151;border-radius:8px;padding:10px;color:#d1d5db;min-height:80px;"></pre>
+
+      <div id="samEncryptContacts" style="font-size:13px;color:#d1d5db;"></div>
+    </fieldset>
+
     <div class="buttons">
       <button id="reload">Перечитати</button>
       <button class="primary" id="save">Зберегти</button>
@@ -287,5 +313,208 @@
 
     loadSettings();
   </script>
+
+  <script>
+    (function () {
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      function boolText(value) {
+        return value ? 'так' : 'ні';
+      }
+
+      function setSamEncryptInfo(text) {
+        const box = byId('samEncryptInfo');
+        if (box) {
+          box.textContent = text;
+        }
+      }
+
+      function renderSamEncryptContacts(contacts) {
+        const box = byId('samEncryptContacts');
+
+        if (!box) {
+          return;
+        }
+
+        box.innerHTML = '';
+
+        const title = document.createElement('div');
+        title.style.fontWeight = '700';
+        title.style.margin = '8px 0 6px';
+        title.textContent = `Контакти: ${Array.isArray(contacts) ? contacts.length : 0}`;
+        box.appendChild(title);
+
+        if (!Array.isArray(contacts) || contacts.length < 1) {
+          const empty = document.createElement('div');
+          empty.className = 'hint';
+          empty.textContent = 'Імпортованих публічних ключів поки немає.';
+          box.appendChild(empty);
+          return;
+        }
+
+        for (const contact of contacts) {
+          const item = document.createElement('div');
+          item.style.padding = '6px 0';
+          item.style.borderTop = '1px solid #374151';
+
+          const name = document.createElement('div');
+          name.style.fontWeight = '700';
+          name.textContent = contact.display_name || 'Без назви';
+
+          const details = document.createElement('div');
+          details.className = 'hint';
+          details.textContent = `Key ID: ${contact.key_id || '-'} | Fingerprint: ${contact.fingerprint || '-'}`;
+
+          item.appendChild(name);
+          item.appendChild(details);
+          box.appendChild(item);
+        }
+      }
+
+      async function refreshSamEncryptStatus() {
+        try {
+          const result = await window.settingsApi.samEncryptStatus();
+
+          if (!result || !result.ok) {
+            setSamEncryptInfo(`Помилка статусу SAM Encrypt: ${result && result.error ? result.error : 'невідома помилка'}`);
+            return;
+          }
+
+          const key = result.my_public_key || {};
+
+          const lines = [
+            `Приватний ключ: ${boolText(result.private_key_exists)}`,
+            `Публічний ключ: ${boolText(result.public_key_exists)}`,
+            `Власник: ${key.owner_name || '-'}`,
+            `Key ID: ${key.key_id || '-'}`,
+            `Fingerprint: ${key.fingerprint || '-'}`,
+            `Контактів: ${result.contacts_count || 0}`,
+            `Exports: ${result.exports_dir || '-'}`,
+            `SAM Encrypt home: ${result.samHome || result.sam_home || '-'}`
+          ];
+
+          setSamEncryptInfo(lines.join('\n'));
+          renderSamEncryptContacts(result.contacts || []);
+
+          if (typeof showStatus === 'function') {
+            showStatus('SAM Encrypt: статус оновлено.');
+          }
+        } catch (error) {
+          setSamEncryptInfo(`Помилка SAM Encrypt: ${error.message || error}`);
+        }
+      }
+
+      async function generateSamEncryptKeys() {
+        const ownerName = (byId('samEncryptOwnerName')?.value || '').trim() || 'SAM';
+
+        try {
+          const result = await window.settingsApi.samEncryptGenerateKeys({
+            ownerName,
+            overwrite: false
+          });
+
+          if (!result || !result.ok) {
+            if (typeof showStatus === 'function') {
+              showStatus(`SAM Encrypt: ${result && result.error ? result.error : 'помилка створення ключів'}`, true);
+            }
+            return;
+          }
+
+          if (typeof showStatus === 'function') {
+            showStatus('SAM Encrypt: ключі створено.');
+          }
+
+          await refreshSamEncryptStatus();
+        } catch (error) {
+          if (typeof showStatus === 'function') {
+            showStatus(`SAM Encrypt: ${error.message || error}`, true);
+          }
+        }
+      }
+
+      async function exportSamEncryptPublic() {
+        try {
+          const result = await window.settingsApi.samEncryptExportPublic();
+
+          if (result && result.cancelled) {
+            if (typeof showStatus === 'function') {
+              showStatus('SAM Encrypt: експорт скасовано.');
+            }
+            return;
+          }
+
+          if (!result || !result.ok) {
+            if (typeof showStatus === 'function') {
+              showStatus(`SAM Encrypt: ${result && result.error ? result.error : 'помилка експорту'}`, true);
+            }
+            return;
+          }
+
+          if (typeof showStatus === 'function') {
+            showStatus('SAM Encrypt: публічний ключ експортовано.');
+          }
+        } catch (error) {
+          if (typeof showStatus === 'function') {
+            showStatus(`SAM Encrypt: ${error.message || error}`, true);
+          }
+        }
+      }
+
+      async function importSamEncryptPublic() {
+        try {
+          const result = await window.settingsApi.samEncryptImportPublic();
+
+          if (result && result.cancelled) {
+            if (typeof showStatus === 'function') {
+              showStatus('SAM Encrypt: імпорт скасовано.');
+            }
+            return;
+          }
+
+          if (!result || !result.ok) {
+            if (typeof showStatus === 'function') {
+              showStatus(`SAM Encrypt: ${result && result.error ? result.error : 'помилка імпорту'}`, true);
+            }
+            return;
+          }
+
+          if (typeof showStatus === 'function') {
+            showStatus('SAM Encrypt: публічний ключ імпортовано.');
+          }
+
+          await refreshSamEncryptStatus();
+        } catch (error) {
+          if (typeof showStatus === 'function') {
+            showStatus(`SAM Encrypt: ${error.message || error}`, true);
+          }
+        }
+      }
+
+      function bindSamEncryptSettings() {
+        byId('samEncryptRefreshStatus')?.addEventListener('click', refreshSamEncryptStatus);
+        byId('samEncryptGenerateKeys')?.addEventListener('click', generateSamEncryptKeys);
+        byId('samEncryptExportPublic')?.addEventListener('click', exportSamEncryptPublic);
+        byId('samEncryptImportPublic')?.addEventListener('click', importSamEncryptPublic);
+        byId('samEncryptOpenHome')?.addEventListener('click', async () => {
+          const result = await window.settingsApi.samEncryptOpenHome();
+
+          if (typeof showStatus === 'function') {
+            showStatus(result && result.ok ? 'SAM Encrypt: папку відкрито.' : `SAM Encrypt: ${result && result.error ? result.error : 'не вдалося відкрити папку'}`, !(result && result.ok));
+          }
+        });
+
+        refreshSamEncryptStatus();
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindSamEncryptSettings, { once: true });
+      } else {
+        bindSamEncryptSettings();
+      }
+    })();
+  </script>
+
 </body>
 </html>

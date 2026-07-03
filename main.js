@@ -1812,6 +1812,7 @@ app.whenReady().then(() => {
     registerPreviewIpcHandlers();
   registerSamEncryptIpcHandlers();
   registerSamEncryptFileIpcHandlers();
+  registerSamEncryptSettingsIpcHandlers();
     createAppMenu();
   ensureStandardEditMenuForClipboard();
     createTray();
@@ -2185,6 +2186,118 @@ async function chooseFileAndDecrypt(payload = {}) {
     outputDir,
     revealInFolder: Boolean(payload.revealInFolder)
   };
+}
+
+
+function registerSamEncryptSettingsIpcHandlers() {
+  ipcMain.handle('sam-encrypt-settings:status', async () => {
+    const status = await runSamEncryptCli(['status']);
+    const contacts = await runSamEncryptCli(['list-contacts']);
+
+    return {
+      ...status,
+      contacts: contacts && contacts.ok ? contacts.contacts || [] : [],
+      contacts_error: contacts && !contacts.ok ? contacts.error : null
+    };
+  });
+
+  ipcMain.handle('sam-encrypt-settings:generate-keys', async (_event, payload = {}) => {
+    const ownerName = String(payload.ownerName || '').trim();
+
+    if (!ownerName) {
+      return {
+        ok: false,
+        error: 'Не задано імʼя власника ключа.'
+      };
+    }
+
+    const args = [
+      'generate-my-keys',
+      '--owner-name',
+      ownerName
+    ];
+
+    if (payload.overwrite) {
+      args.push('--overwrite');
+    }
+
+    return runSamEncryptCli(args);
+  });
+
+  ipcMain.handle('sam-encrypt-settings:export-public', async () => {
+    const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
+
+    const dialogResult = await dialog.showOpenDialog(ownerWindow, {
+      title: 'Вибрати папку для експорту публічного ключа',
+      properties: ['openDirectory', 'createDirectory'],
+      buttonLabel: 'Експортувати'
+    });
+
+    if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
+      return {
+        ok: false,
+        cancelled: true,
+        error: null
+      };
+    }
+
+    const outputDir = dialogResult.filePaths[0];
+
+    const result = await runSamEncryptCli([
+      'export-public',
+      '--output-dir',
+      outputDir
+    ]);
+
+    if (result && result.ok && result.output_path) {
+      shell.showItemInFolder(result.output_path);
+    }
+
+    return {
+      ...result,
+      outputDir
+    };
+  });
+
+  ipcMain.handle('sam-encrypt-settings:import-public', async () => {
+    const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
+
+    const dialogResult = await dialog.showOpenDialog(ownerWindow, {
+      title: 'Вибрати .sampub публічний ключ',
+      properties: ['openFile'],
+      filters: [
+        { name: 'SAM public keys', extensions: ['sampub'] },
+        { name: 'All files', extensions: ['*'] }
+      ],
+      buttonLabel: 'Імпортувати'
+    });
+
+    if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
+      return {
+        ok: false,
+        cancelled: true,
+        error: null
+      };
+    }
+
+    return runSamEncryptCli([
+      'import-public',
+      '--file',
+      dialogResult.filePaths[0]
+    ]);
+  });
+
+  ipcMain.handle('sam-encrypt-settings:open-home', async () => {
+    const homeDir = getSamEncryptHomeDir();
+    fs.mkdirSync(homeDir, { recursive: true });
+    const result = await shell.openPath(homeDir);
+
+    return {
+      ok: !result,
+      error: result || null,
+      path: homeDir
+    };
+  });
 }
 
 function registerSamEncryptFileIpcHandlers() {
