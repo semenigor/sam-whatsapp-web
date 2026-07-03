@@ -58,3 +58,6 @@ builder-effective-config.yaml
 
 # local GitHub release note drafts
 RELEASE_NOTES_*.md
+helpers/sam_encrypt/.venv/
+helpers/sam_encrypt/**/__pycache__/
+helpers/sam_encrypt/**/*.pyc

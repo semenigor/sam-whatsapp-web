@@ -64,7 +64,20 @@
         }
       ],
       "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.${ext}"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "helpers/sam_encrypt",
+        "to": "helpers/sam_encrypt",
+        "filter": [
+          "**/*",
+          "!**/.venv/**",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.bak*"
+        ]
+      }
+    ]
   },
   "devDependencies": {
     "electron": "34.5.8",

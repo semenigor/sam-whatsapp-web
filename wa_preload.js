@@ -1,4 +1,4 @@
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, contextBridge } = require('electron');
 
 const state = {
   enabled: false,
@@ -6842,5 +6842,37 @@ if (!window.__samUiScaleSettingsRefreshBoot) {
       setTimeout(samRefreshUiScaleMode, 150);
     }
   }, true);
+}
+
+try {
+  const samEncryptApi = {
+    status: () => ipcRenderer.invoke('sam-encrypt:status'),
+    listContacts: () => ipcRenderer.invoke('sam-encrypt:list-contacts'),
+    encryptSelf: (inputPath, outputDir) => ipcRenderer.invoke('sam-encrypt:encrypt-self', {
+      inputPath,
+      outputDir
+    }),
+    decrypt: (inputPath, outputDir) => ipcRenderer.invoke('sam-encrypt:decrypt', {
+      inputPath,
+      outputDir
+    })
+  };
+
+  let exposed = false;
+
+  if (typeof contextBridge !== 'undefined' && contextBridge && typeof contextBridge.exposeInMainWorld === 'function') {
+    try {
+      contextBridge.exposeInMainWorld('samEncrypt', samEncryptApi);
+      exposed = true;
+    } catch (error) {
+      console.warn('SAM Encrypt contextBridge expose failed, falling back to window:', error);
+    }
+  }
+
+  if (!exposed && typeof window !== 'undefined' && !window.samEncrypt) {
+    window.samEncrypt = samEncryptApi;
+  }
+} catch (error) {
+  console.error('SAM Encrypt preload bridge failed:', error);
 }
 

@@ -1810,7 +1810,9 @@ app.whenReady().then(() => {
     registerMessageCopyIpcHandlers();
   registerNotesIpcHandlers();
     registerPreviewIpcHandlers();
+  registerSamEncryptIpcHandlers();
     createAppMenu();
+  ensureStandardEditMenuForClipboard();
     createTray();
     createMainWindow();
     setupAutoUpdater();
@@ -1830,3 +1832,233 @@ app.whenReady().then(() => {
     // Для Linux залишаємо процес активним у tray.
   });
 }
+
+function getSamEncryptHelperRoot() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'helpers', 'sam_encrypt');
+  }
+
+  return path.join(__dirname, 'helpers', 'sam_encrypt');
+}
+
+function getSamEncryptCliPath() {
+  return path.join(getSamEncryptHelperRoot(), 'sam_encrypt_cli.py');
+}
+
+function getSamEncryptHomeDir() {
+  return path.join(app.getPath('userData'), 'sam-encrypt');
+}
+
+function getSamEncryptPythonExecutable() {
+  const helperRoot = getSamEncryptHelperRoot();
+
+  const candidates = process.platform === 'win32'
+    ? [
+        path.join(helperRoot, '.venv', 'Scripts', 'python.exe'),
+        'python'
+      ]
+    : [
+        path.join(helperRoot, '.venv', 'bin', 'python3'),
+        path.join(helperRoot, '.venv', 'bin', 'python'),
+        'python3',
+        'python'
+      ];
+
+  for (const candidate of candidates) {
+    if (candidate === 'python3' || candidate === 'python') {
+      return candidate;
+    }
+
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+
+function runSamEncryptCli(args) {
+  return new Promise((resolve) => {
+    const helperRoot = getSamEncryptHelperRoot();
+    const cliPath = getSamEncryptCliPath();
+    const pythonPath = getSamEncryptPythonExecutable();
+    const samHome = getSamEncryptHomeDir();
+
+    if (!fs.existsSync(cliPath)) {
+      resolve({
+        ok: false,
+        error: `SAM Encrypt CLI не знайдено: ${cliPath}`,
+        helperRoot,
+        cliPath,
+        samHome
+      });
+      return;
+    }
+
+    fs.mkdirSync(samHome, { recursive: true });
+
+    const child = spawn(pythonPath, [cliPath, ...args], {
+      cwd: helperRoot,
+      env: {
+        ...process.env,
+        SAM_ENCRYPT_HOME: samHome
+      },
+      windowsHide: true
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString('utf8');
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString('utf8');
+    });
+
+    child.on('error', (error) => {
+      resolve({
+        ok: false,
+        error: error.message,
+        helperRoot,
+        cliPath,
+        pythonPath,
+        samHome,
+        stdout,
+        stderr
+      });
+    });
+
+    child.on('close', (code) => {
+      const text = stdout.trim();
+
+      let parsed = null;
+
+      if (text) {
+        try {
+          parsed = JSON.parse(text);
+        } catch (error) {
+          parsed = {
+            ok: false,
+            error: `Не вдалося прочитати JSON від SAM Encrypt CLI: ${error.message}`,
+            raw_stdout: stdout
+          };
+        }
+      } else {
+        parsed = {
+          ok: code === 0,
+          error: code === 0 ? null : 'SAM Encrypt CLI завершився без JSON-виводу.'
+        };
+      }
+
+      resolve({
+        ...parsed,
+        exitCode: code,
+        helperRoot,
+        cliPath,
+        pythonPath,
+        samHome,
+        stderr
+      });
+    });
+  });
+}
+
+function registerSamEncryptIpcHandlers() {
+  ipcMain.handle('sam-encrypt:status', async () => {
+    return runSamEncryptCli(['status']);
+  });
+
+  ipcMain.handle('sam-encrypt:list-contacts', async () => {
+    return runSamEncryptCli(['list-contacts']);
+  });
+
+  ipcMain.handle('sam-encrypt:encrypt-self', async (_event, payload = {}) => {
+    if (!payload.inputPath) {
+      return {
+        ok: false,
+        error: 'Не задано inputPath.'
+      };
+    }
+
+    const args = [
+      'encrypt-self',
+      '--input',
+      String(payload.inputPath)
+    ];
+
+    if (payload.outputDir) {
+      args.push('--output-dir', String(payload.outputDir));
+    }
+
+    return runSamEncryptCli(args);
+  });
+
+  ipcMain.handle('sam-encrypt:decrypt', async (_event, payload = {}) => {
+    if (!payload.inputPath) {
+      return {
+        ok: false,
+        error: 'Не задано inputPath.'
+      };
+    }
+
+    const args = [
+      'decrypt',
+      '--input',
+      String(payload.inputPath)
+    ];
+
+    if (payload.outputDir) {
+      args.push('--output-dir', String(payload.outputDir));
+    }
+
+    return runSamEncryptCli(args);
+  });
+}
+
+function ensureStandardEditMenuForClipboard() {
+  const currentMenu = Menu.getApplicationMenu();
+
+  if (!currentMenu) {
+    return;
+  }
+
+  const hasEditMenu = currentMenu.items.some((item) => {
+    const label = String(item.label || '').toLowerCase();
+    return item.role === 'editMenu'
+      || label === 'edit'
+      || label === 'редагування'
+      || label.includes('edit');
+  });
+
+  if (hasEditMenu) {
+    return;
+  }
+
+  const editMenu = Menu.buildFromTemplate([
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo', label: 'Undo' },
+        { role: 'redo', label: 'Redo' },
+        { type: 'separator' },
+        { role: 'cut', label: 'Cut' },
+        { role: 'copy', label: 'Copy' },
+        { role: 'paste', label: 'Paste' },
+        { role: 'pasteAndMatchStyle', label: 'Paste and Match Style' },
+        { role: 'delete', label: 'Delete' },
+        { type: 'separator' },
+        { role: 'selectAll', label: 'Select All' }
+      ]
+    }
+  ]).items[0];
+
+  const insertIndex = process.platform === 'darwin'
+    ? Math.min(1, currentMenu.items.length)
+    : 0;
+
+  currentMenu.insert(insertIndex, editMenu);
+  Menu.setApplicationMenu(currentMenu);
+}
+
