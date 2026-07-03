@@ -556,11 +556,11 @@ SAM WhatsApp Web
 
 2. Робота з файлами Word та Excel
 
-Файли Word, Excel та інші офісні вкладення можна відкривати через LibreOffice.
+Файли Word, Excel та інші офісні вкладення можна відкривати через LibreOffice або системну програму за замовчуванням.
 Якщо увімкнений попередній перегляд, програма створює PDF-preview і показує документ у внутрішньому вікні.
 
 У вікні перегляду є кнопки:
-- Відкрити в LibreOffice
+- Відкрити файл
 - Показати в папці
 - Закрити
 
@@ -1051,14 +1051,6 @@ async function openOfficeDocument(filePath) {
   const officeBinary = findExecutable(['libreoffice', 'soffice']);
 
   if (!officeBinary) {
-    await dialog.showMessageBox({
-      type: 'warning',
-      title: getAppWindowTitle(),
-      message: 'LibreOffice не знайдено',
-      detail: 'Буде використано системну програму за замовчуванням.',
-      buttons: ['OK']
-    });
-
     await openExternalFile(filePath);
     return;
   }
@@ -1270,8 +1262,8 @@ async function showOfficePreview(filePath) {
       type: 'warning',
       title: getAppWindowTitle(),
       message: 'Не вдалося створити попередній перегляд',
-      detail: `${String(error)}\n\nФайл можна відкрити напряму в LibreOffice.`,
-      buttons: ['Відкрити в LibreOffice', 'Показати в папці', 'OK'],
+      detail: `${String(error)}\n\nФайл можна відкрити у системній програмі за замовчуванням.`,
+      buttons: ['Відкрити файл', 'Показати в папці', 'OK'],
       defaultId: 0,
       cancelId: 2
     });
