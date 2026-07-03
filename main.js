@@ -35,6 +35,78 @@ const electronLog = require('electron-log');
 
 const APP_NAME = 'SAM WhatsApp Web';
 
+let samUnreadBadgeCount = 0;
+
+const SAM_UNREAD_OVERLAY_ICON_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAvUlEQVR42u2XwQ2AIAxFnYGr67AK03h1B0ZiDE89Y0lqYoxGUGn/wSYvJqj5XyylDMMfL2PxXlXMMYGJTGKIyXJNMl7uu6+FR2YWsVrK8+MX4mH3pa2U98Ib8emh8JHJUrzdhEx77kCoTTjqZIBuE/NBtrcy363zrIDT/vd1uSCVTMNAvDKQlAykKwOkZIBOdzUl8Q2wGUDJAfNVYF4HbCuh+V4AsRua9wMQHRFETwjRFUOcCyBORjBnwx6xAoJ+vR7dfMtvAAAAAElFTkSuQmCC';
+
+function normalizeSamUnreadCount(value) {
+  const count = Number.parseInt(String(value ?? '0'), 10);
+
+  if (!Number.isFinite(count) || count <= 0) {
+    return 0;
+  }
+
+  return Math.min(count, 999);
+}
+
+function createSamUnreadOverlayIcon() {
+  return nativeImage.createFromDataURL(SAM_UNREAD_OVERLAY_ICON_DATA_URL);
+}
+
+function setSamUnreadBadgeCount(rawCount) {
+  const count = normalizeSamUnreadCount(rawCount);
+
+  if (samUnreadBadgeCount === count) {
+    return {
+      ok: true,
+      changed: false,
+      count
+    };
+  }
+
+  samUnreadBadgeCount = count;
+
+  try {
+    app.setBadgeCount(count);
+  } catch (error) {
+    electronLog.warn('Failed to set app badge count:', error);
+  }
+
+  try {
+    if (process.platform === 'win32' && mainWindow && !mainWindow.isDestroyed()) {
+      if (count > 0) {
+        mainWindow.setOverlayIcon(createSamUnreadOverlayIcon(), `${count} unread messages`);
+      } else {
+        mainWindow.setOverlayIcon(null, '');
+      }
+    }
+  } catch (error) {
+    electronLog.warn('Failed to set Windows overlay icon:', error);
+  }
+
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.flashFrame(count > 0 && !mainWindow.isFocused());
+    }
+  } catch (error) {
+    electronLog.warn('Failed to update taskbar flash state:', error);
+  }
+
+  return {
+    ok: true,
+    changed: true,
+    count
+  };
+}
+
+function registerSamUnreadBadgeIpcHandlers() {
+  ipcMain.handle('sam-unread:set-count', async (_event, payload = {}) => {
+    return setSamUnreadBadgeCount(payload && payload.count);
+  });
+}
+
+
+
 function getAppWindowTitle() {
   return `${APP_NAME} v${app.getVersion()}`;
 }
@@ -1813,6 +1885,7 @@ app.whenReady().then(() => {
   registerSamEncryptIpcHandlers();
   registerSamEncryptFileIpcHandlers();
   registerSamEncryptSettingsIpcHandlers();
+  registerSamUnreadBadgeIpcHandlers();
     createAppMenu();
   ensureStandardEditMenuForClipboard();
     createTray();

@@ -7124,3 +7124,169 @@ if (document.readyState === 'loading') {
   samDecryptStartButton();
 }
 
+const SAM_UNREAD_BADGE_WATCHER_ID = 'sam-unread-badge-watcher-v1';
+const samUnreadBadgeState = {
+  started: false,
+  lastCount: -1,
+  timer: null
+};
+
+function samUnreadExtractFirstNumber(value) {
+  const match = String(value || '').match(/\d+/);
+  return match ? Number.parseInt(match[0], 10) : 0;
+}
+
+function samUnreadNormalizeCount(value) {
+  const count = Number.parseInt(String(value ?? '0'), 10);
+
+  if (!Number.isFinite(count) || count <= 0) {
+    return 0;
+  }
+
+  return Math.min(count, 999);
+}
+
+function samUnreadCountFromTitle() {
+  const title = String(document.title || '');
+
+  let match = title.match(/^\((\d+)\)\s*/);
+
+  if (!match) {
+    match = title.match(/\((\d+)\)\s*WhatsApp/i);
+  }
+
+  if (!match) {
+    return 0;
+  }
+
+  return samUnreadNormalizeCount(match[1]);
+}
+
+function samUnreadCountFromDom() {
+  const selectors = [
+    '[aria-label*="unread" i]',
+    '[aria-label*="непрочит" i]',
+    '[title*="unread" i]',
+    '[title*="непрочит" i]'
+  ];
+
+  const seen = new Set();
+  let total = 0;
+
+  for (const selector of selectors) {
+    for (const element of document.querySelectorAll(selector)) {
+      if (!element || seen.has(element)) {
+        continue;
+      }
+
+      seen.add(element);
+
+      const raw = [
+        element.getAttribute('aria-label'),
+        element.getAttribute('title'),
+        element.textContent
+      ].filter(Boolean).join(' ');
+
+      const count = samUnreadExtractFirstNumber(raw);
+
+      if (count > 0) {
+        total += count;
+      }
+    }
+  }
+
+  return samUnreadNormalizeCount(total);
+}
+
+function samUnreadGetCurrentCount() {
+  const titleCount = samUnreadCountFromTitle();
+
+  if (titleCount > 0) {
+    return titleCount;
+  }
+
+  return samUnreadCountFromDom();
+}
+
+function samUnreadSendBadgeCount(force = false) {
+  try {
+    const count = samUnreadGetCurrentCount();
+
+    if (!force && count === samUnreadBadgeState.lastCount) {
+      return;
+    }
+
+    samUnreadBadgeState.lastCount = count;
+
+    ipcRenderer.invoke('sam-unread:set-count', {
+      count
+    }).catch((error) => {
+      console.warn('SAM unread badge IPC failed:', error);
+    });
+  } catch (error) {
+    console.warn('SAM unread badge update failed:', error);
+  }
+}
+
+function samUnreadScheduleBadgeUpdate() {
+  if (samUnreadBadgeState.timer) {
+    window.clearTimeout(samUnreadBadgeState.timer);
+  }
+
+  samUnreadBadgeState.timer = window.setTimeout(() => {
+    samUnreadBadgeState.timer = null;
+    samUnreadSendBadgeCount(false);
+  }, 300);
+}
+
+function samUnreadStartBadgeWatcher() {
+  if (samUnreadBadgeState.started) {
+    return;
+  }
+
+  samUnreadBadgeState.started = true;
+
+  samUnreadSendBadgeCount(true);
+
+  const titleElement = document.querySelector('title');
+
+  if (titleElement) {
+    const titleObserver = new MutationObserver(() => {
+      samUnreadScheduleBadgeUpdate();
+    });
+
+    titleObserver.observe(titleElement, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+
+  window.setInterval(() => {
+    samUnreadSendBadgeCount(false);
+  }, 2000);
+
+  window.addEventListener('focus', () => {
+    samUnreadSendBadgeCount(true);
+  });
+
+  window.addEventListener('blur', () => {
+    samUnreadSendBadgeCount(true);
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    samUnreadSendBadgeCount(true);
+  });
+}
+
+if (!window[SAM_UNREAD_BADGE_WATCHER_ID]) {
+  window[SAM_UNREAD_BADGE_WATCHER_ID] = true;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', samUnreadStartBadgeWatcher, { once: true });
+  } else {
+    samUnreadStartBadgeWatcher();
+  }
+}
+
+
