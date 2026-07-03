@@ -3316,61 +3316,7 @@ function samEnsureCompactViewStyle() {
       transform: scale(0.92);
       transform-origin: center center;
     }
-
-    /*
-      ПРАВЕ ПОЛЕ: відкритий чат
-      Зменшуємо текст повідомлень і внутрішні відступи.
-    */
-
-    #main {
-      font-size: calc(14px * var(--sam-chat-font-scale)) !important;
-    }
-
-    #main .copyable-text,
-    #main .selectable-text,
-    #main [data-pre-plain-text],
-    #main span[dir="ltr"],
-    #main span[dir="auto"] {
-      font-size: calc(14px * var(--sam-chat-font-scale)) !important;
-      line-height: 1.32 !important;
-    }
-
-    /*
-      Bubbles повідомлень.
-      WhatsApp часто міняє класи, тому тут обережні селектори через data-pre-plain-text.
-    */
-
-    #main [data-pre-plain-text] {
-      margin-top: calc(2px * var(--sam-chat-density-scale)) !important;
-      margin-bottom: calc(2px * var(--sam-chat-density-scale)) !important;
-    }
-
-    #main [data-pre-plain-text] .copyable-text {
-      padding-top: calc(3px * var(--sam-chat-density-scale)) !important;
-      padding-bottom: calc(3px * var(--sam-chat-density-scale)) !important;
-    }
-
-    /*
-      Поле введення повідомлення.
-    */
-
-    #main footer [contenteditable="true"],
-    #main footer [role="textbox"],
-    #main footer span[dir="auto"] {
-      font-size: calc(14px * var(--sam-chat-font-scale)) !important;
-      line-height: 1.3 !important;
-    }
-
-    /*
-      Шапка чату.
-      Назву залишаємо читабельною, але компактнішою.
-    */
-
-    #main header [data-testid="conversation-info-header"] span,
-    #main header [data-testid="conversation-info-header"] div {
-      font-size: calc(14px * var(--sam-chat-font-scale)) !important;
-      line-height: 1.25 !important;
-    }
+    /* Праве поле #main більше не стискаємо: це ламало перехід до цитованих повідомлень. */
   `;
 
   document.documentElement.appendChild(style);
@@ -6509,54 +6455,7 @@ function samEnsureUltraCompactViewStyle() {
       max-width: var(--sam-list-avatar-size) !important;
       max-height: var(--sam-list-avatar-size) !important;
     }
-
-    /*
-      ПРАВЕ ПОЛЕ: сам чат
-    */
-
-    #main {
-      font-size: calc(14px * var(--sam-chat-font-scale)) !important;
-    }
-
-    #main .copyable-text,
-    #main .selectable-text,
-    #main [data-pre-plain-text],
-    #main span[dir="ltr"],
-    #main span[dir="auto"] {
-      font-size: calc(14px * var(--sam-chat-font-scale)) !important;
-      line-height: 1.24 !important;
-    }
-
-    #main [data-pre-plain-text] {
-      margin-top: calc(1px * var(--sam-chat-density-scale)) !important;
-      margin-bottom: calc(1px * var(--sam-chat-density-scale)) !important;
-    }
-
-    #main [data-pre-plain-text] .copyable-text {
-      padding-top: calc(2px * var(--sam-chat-density-scale)) !important;
-      padding-bottom: calc(2px * var(--sam-chat-density-scale)) !important;
-    }
-
-    /*
-      Поле введення повідомлення.
-    */
-
-    #main footer [contenteditable="true"],
-    #main footer [role="textbox"],
-    #main footer span[dir="auto"] {
-      font-size: calc(14px * var(--sam-chat-font-scale)) !important;
-      line-height: 1.22 !important;
-    }
-
-    /*
-      Шапка чату.
-    */
-
-    #main header [data-testid="conversation-info-header"] span,
-    #main header [data-testid="conversation-info-header"] div {
-      font-size: calc(14px * var(--sam-chat-font-scale)) !important;
-      line-height: 1.18 !important;
-    }
+    /* Праве поле #main більше не стискаємо: це ламало перехід до цитованих повідомлень. */
   `;
 
   document.documentElement.appendChild(style);
@@ -7253,5 +7152,4 @@ if (!window[SAM_UNREAD_BADGE_WATCHER_ID]) {
     samUnreadStartBadgeWatcher();
   }
 }
-
 
