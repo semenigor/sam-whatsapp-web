@@ -3784,53 +3784,18 @@ function samChatRowsSpacingV3Reset(rows) {
 }
 
 function samApplyChatRowsSpacingV3() {
-  samEnsureChatRowAvatarCompactStyle();
-
-  let rows = samChatRowsSpacingV3GetRows();
-
-  if (rows.length < 2) {
-    return;
-  }
-
   /*
-    ВАЖЛИВО:
-    спочатку скидаємо попередній translate, щоб зсув не накопичувався.
-  */
+    Вимкнено ручне ущільнення рядків через CSS translate.
 
+    WhatsApp Web використовує віртуалізований список чатів. Після оновлень
+    DOM рядки можуть мати іншу фактичну висоту, і ручний translate починає
+    накладати один чат на інший. Залишаємо тільки очищення старих translate,
+    якщо вони вже були застосовані попередньою версією.
+  */
+  const rows = samChatRowsSpacingV3GetRows();
   samChatRowsSpacingV3Reset(rows);
-
-  rows = samChatRowsSpacingV3GetRows();
-
-  if (rows.length < 2) {
-    return;
-  }
-
-  const firstTop = rows[0].getBoundingClientRect().y;
-  const secondTop = rows[1].getBoundingClientRect().y;
-  const originalStep = Math.round(secondTop - firstTop);
-  const targetStep = samChatRowsSpacingV3TargetStep();
-
-  if (!Number.isFinite(originalStep) || originalStep <= 0) {
-    return;
-  }
-
-  /*
-    Якщо WhatsApp уже сам зробив нормальний крок — не чіпаємо.
-  */
-
-  if (originalStep <= targetStep + 1) {
-    return;
-  }
-
-  rows.forEach((row, index) => {
-    const currentTop = row.getBoundingClientRect().y;
-    const desiredTop = firstTop + index * targetStep;
-    const shift = Math.round(desiredTop - currentTop);
-
-    row.style.setProperty('translate', `0 ${shift}px`, 'important');
-    row.style.setProperty('will-change', 'translate', 'important');
-  });
 }
+
 
 function samStartChatRowsSpacingV3() {
   if (window.__samChatRowsSpacingV3Started) {
