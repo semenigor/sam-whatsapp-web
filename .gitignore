@@ -64,3 +64,8 @@ helpers/sam_encrypt/**/*.pyc
 helpers/sam_encrypt/build/
 helpers/sam_encrypt/dist/
 helpers/sam_encrypt/*.spec
+# Local backup / editor files
+# Local Python environments
+# Build outputs
+helpers/sam_encrypt/sam_encrypt_cli_bin
+helpers/sam_encrypt/sam_encrypt_cli_bin.exe
