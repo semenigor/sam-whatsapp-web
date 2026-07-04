@@ -1,6 +1,6 @@
 {
   "name": "sam-whatsapp-web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Linux Electron wrapper for WhatsApp Web",
   "main": "main.js",
   "private": true,
