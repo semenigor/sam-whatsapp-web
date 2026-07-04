@@ -4616,7 +4616,9 @@ function samNotesEnsurePanel() {
     trigger.id = 'samMiniNotesTrigger';
     trigger.type = 'button';
     trigger.title = 'SAM-блокнот';
-    trigger.textContent = 'SAM\n📝';
+    trigger.innerHTML = samLeftRailIconHtml('notes');
+    trigger.setAttribute('aria-label', 'SAM-блокнот');
+    samApplyLeftRailButtonBase(trigger, 'notes');
 
     trigger.addEventListener('click', (event) => {
       event.preventDefault();
@@ -6761,6 +6763,185 @@ try {
   console.error('SAM Encrypt preload bridge failed:', error);
 }
 
+
+function samLeftRailIconHtml(kind) {
+  if (kind === 'notes') {
+    return `
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+        <path fill="currentColor" d="M6 3.75h9.25L19 7.5v12.75H6V3.75Zm2 2v12.5h9V8.35L14.4 5.75H8Zm2 5.25h5v1.6h-5V11Zm0 3.25h5v1.6h-5v-1.6Z"></path>
+      </svg>
+    `;
+  }
+
+  if (kind === 'encrypt') {
+    return `
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+        <path fill="currentColor" d="M7 10V8a5 5 0 0 1 10 0v2h1.25A1.75 1.75 0 0 1 20 11.75v7.5A1.75 1.75 0 0 1 18.25 21H5.75A1.75 1.75 0 0 1 4 19.25v-7.5A1.75 1.75 0 0 1 5.75 10H7Zm2 0h6V8a3 3 0 0 0-6 0v2Zm3 3.25a1.25 1.25 0 0 0-.75 2.25v1.75h1.5V15.5A1.25 1.25 0 0 0 12 13.25Z"></path>
+      </svg>
+    `;
+  }
+
+  return '';
+}
+
+function samApplyLeftRailButtonBase(button, kind) {
+  if (!button) {
+    return;
+  }
+
+  const topByKind = {
+    notes: 236,
+    encrypt: 292
+  };
+
+  button.classList.add('sam-left-rail-action-button');
+  button.classList.add(`sam-left-rail-action-${kind}`);
+
+  button.style.position = 'fixed';
+  button.style.left = '12px';
+  button.style.top = `${topByKind[kind] || 292}px`;
+  button.style.zIndex = '900';
+  button.style.width = '40px';
+  button.style.height = '40px';
+  button.style.border = '0';
+  button.style.borderRadius = '50%';
+  button.style.background = 'transparent';
+  button.style.color = '#aebac1';
+  button.style.padding = '0';
+  button.style.margin = '0';
+  button.style.display = 'inline-flex';
+  button.style.alignItems = 'center';
+  button.style.justifyContent = 'center';
+  button.style.cursor = 'pointer';
+  button.style.boxShadow = 'none';
+  button.style.userSelect = 'none';
+  button.style.fontSize = '0';
+  button.style.lineHeight = '1';
+}
+
+function samEnsureLeftRailButtonStyle() {
+  if (document.getElementById('samLeftRailActionButtonStyle')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'samLeftRailActionButtonStyle';
+  style.textContent = `
+    .sam-left-rail-action-button {
+      transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease !important;
+    }
+
+    .sam-left-rail-action-button:hover {
+      background: rgba(255, 255, 255, 0.08) !important;
+      color: #e9edef !important;
+    }
+
+    .sam-left-rail-action-button:active {
+      background: rgba(255, 255, 255, 0.14) !important;
+      color: #e9edef !important;
+    }
+
+    .sam-left-rail-action-button svg {
+      display: block !important;
+      width: 24px !important;
+      height: 24px !important;
+      pointer-events: none !important;
+    }
+
+    html[data-sam-floating-ui-hidden="1"] #samLocalPinsTrigger,
+    html[data-sam-floating-ui-hidden="1"] #samLocalPinsPanel,
+    html[data-sam-floating-ui-hidden="1"] #samMiniNotesTrigger,
+    html[data-sam-floating-ui-hidden="1"] #samMiniNotesPanel,
+    html[data-sam-floating-ui-hidden="1"] #sam-encrypt-floating-button-v1,
+    html[data-sam-floating-ui-hidden="1"] #sam-decrypt-floating-button-v1,
+    html[data-sam-floating-ui-hidden="1"] #sam-encrypt-status-v1 {
+      display: none !important;
+    }
+  `;
+
+  samSafeAppendStyleElement(style);
+}
+
+function samIsLargeWhatsAppOverlayOpen() {
+  const candidates = Array.from(document.querySelectorAll(
+    '[role="dialog"], [aria-modal="true"], [data-animate-modal-popup], [data-testid*="media"], [data-testid*="viewer"], [data-testid*="drawer"]'
+  ));
+
+  const minWidth = Math.max(260, window.innerWidth * 0.45);
+  const minHeight = Math.max(260, window.innerHeight * 0.45);
+
+  for (const element of candidates) {
+    if (!element || element.closest('#sam-encrypt-recipient-picker-backdrop')) {
+      continue;
+    }
+
+    const rect = element.getBoundingClientRect();
+
+    if (rect.width < minWidth || rect.height < minHeight) {
+      continue;
+    }
+
+    const text = String(element.innerText || element.textContent || '').toLowerCase();
+    const hasMedia = Boolean(element.querySelector('img, video, canvas, [data-testid*="media"], [data-testid*="viewer"]'));
+
+    if (
+      hasMedia ||
+      text.includes('зображ') ||
+      text.includes('image') ||
+      text.includes('media') ||
+      text.includes('відео') ||
+      text.includes('video')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function samUpdateFloatingUiVisibility() {
+  if (!document.documentElement) {
+    return;
+  }
+
+  document.documentElement.setAttribute(
+    'data-sam-floating-ui-hidden',
+    samIsLargeWhatsAppOverlayOpen() ? '1' : '0'
+  );
+}
+
+function samStartFloatingUiVisibilityWatcher() {
+  samEnsureLeftRailButtonStyle();
+
+  if (window.__samFloatingUiVisibilityWatcherStarted) {
+    samUpdateFloatingUiVisibility();
+    return;
+  }
+
+  window.__samFloatingUiVisibilityWatcherStarted = true;
+
+  samUpdateFloatingUiVisibility();
+
+  const schedule = () => {
+    window.setTimeout(samUpdateFloatingUiVisibility, 50);
+    window.setTimeout(samUpdateFloatingUiVisibility, 250);
+  };
+
+  document.addEventListener('click', schedule, true);
+  document.addEventListener('keydown', schedule, true);
+
+  const observer = new MutationObserver(schedule);
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true
+  });
+
+  window.setInterval(samUpdateFloatingUiVisibility, 1000);
+}
+
+
 const SAM_ENCRYPT_BUTTON_ID = 'sam-encrypt-floating-button-v1';
 const SAM_ENCRYPT_STATUS_ID = 'sam-encrypt-status-v1';
 
@@ -7173,31 +7354,11 @@ function samEncryptEnsureButton() {
   const button = document.createElement('button');
   button.id = SAM_ENCRYPT_BUTTON_ID;
   button.type = 'button';
-  button.textContent = 'SAM 🔐';
+  button.innerHTML = samLeftRailIconHtml('encrypt');
   button.title = 'SAM Encrypt: зашифрувати файл для передачі';
-  button.style.position = 'fixed';
-  button.style.left = '5px';
-  button.style.top = '292px';
-  button.style.zIndex = '2147483647';
-  button.style.width = '46px';
-  button.style.height = '34px';
-  button.style.border = '1px solid rgba(255,255,255,0.22)';
-  button.style.borderRadius = '9px';
-  button.style.background = '#202c33';
-  button.style.color = '#e9edef';
-  button.style.fontSize = '11px';
-  button.style.fontWeight = '700';
-  button.style.cursor = 'pointer';
-  button.style.boxShadow = '0 2px 8px rgba(0,0,0,0.25)';
-  button.style.userSelect = 'none';
-
-  button.addEventListener('mouseenter', () => {
-    button.style.background = '#2a3942';
-  });
-
-  button.addEventListener('mouseleave', () => {
-    button.style.background = '#202c33';
-  });
+  button.setAttribute('aria-label', 'SAM Encrypt: зашифрувати файл для передачі');
+  samEnsureLeftRailButtonStyle();
+  samApplyLeftRailButtonBase(button, 'encrypt');
 
   button.addEventListener('click', (event) => {
     event.preventDefault();
@@ -7227,7 +7388,7 @@ if (document.readyState === 'loading') {
   samEncryptStartButton();
 }
 
-const SAM_DECRYPT_BUTTON_ENABLED = true;
+const SAM_DECRYPT_BUTTON_ENABLED = false;
 const SAM_DECRYPT_BUTTON_ID = 'sam-decrypt-floating-button-v1';
 
 async function samDecryptChooseFileManual() {
@@ -7337,6 +7498,17 @@ if (document.readyState === 'loading') {
 } else {
   samDecryptStartButton();
 }
+
+if (!window.__samFloatingUiVisibilityWatcherBootScheduled) {
+  window.__samFloatingUiVisibilityWatcherBootScheduled = true;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', samStartFloatingUiVisibilityWatcher, { once: true });
+  } else {
+    samStartFloatingUiVisibilityWatcher();
+  }
+}
+
 
 const SAM_UNREAD_BADGE_WATCHER_ID = 'sam-unread-badge-watcher-v1';
 const samUnreadBadgeState = {
