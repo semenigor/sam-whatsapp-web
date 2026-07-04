@@ -5273,6 +5273,13 @@ function samNotesPatchOpenMessageMenuOnce() {
 }
 
 function samStartNotesMessageMenuPatch() {
+  /*
+    SAM Notes DOM injection disabled for v0.2 stabilization.
+    Disabled: injected message menu item "SAM: зберегти в блокнот".
+    Reason: broad menu detection can recursively treat our own injected item as a menu.
+  */
+  return;
+
   if (window.__samNotesMessageMenuPatchStarted) {
     return;
   }
@@ -5321,13 +5328,10 @@ function samStartNotesMessageMenuPatch() {
   setInterval(run, 1200);
 }
 
-if (!window.__samNotesMessageMenuPatchScheduled) {
-  window.__samNotesMessageMenuPatchScheduled = true;
-
-  setTimeout(samStartNotesMessageMenuPatch, 0);
-  setTimeout(samStartNotesMessageMenuPatch, 800);
-  setTimeout(samStartNotesMessageMenuPatch, 2000);
-}
+/*
+  SAM Notes DOM injection disabled for v0.2 stabilization.
+  Message menu patch boot schedule intentionally disabled.
+*/
 
 // ===== SAM save selected messages to mini notes =====
 // Додає кнопку "Зберегти в блокнот" у нижню панель вибору кількох повідомлень.
@@ -5515,6 +5519,12 @@ function samNotesEnsureSelectionBarButton() {
 }
 
 function samStartNotesSelectionBarButton() {
+  /*
+    SAM Notes DOM injection disabled for v0.2 stabilization.
+    Disabled: selected messages quick save button.
+  */
+  return;
+
   if (window.__samNotesSelectionBarButtonStarted) {
     return;
   }
@@ -5549,13 +5559,10 @@ function samStartNotesSelectionBarButton() {
   }
 }
 
-if (!window.__samNotesSelectionBarButtonScheduled) {
-  window.__samNotesSelectionBarButtonScheduled = true;
-
-  setTimeout(samStartNotesSelectionBarButton, 0);
-  setTimeout(samStartNotesSelectionBarButton, 800);
-  setTimeout(samStartNotesSelectionBarButton, 2000);
-}
+/*
+  SAM Notes DOM injection disabled for v0.2 stabilization.
+  Selection bar button boot schedule intentionally disabled.
+*/
 
 // ===== SAM auto clear selected messages after actions =====
 // Після копіювання вибраних або збереження вибраних у блокнот автоматично знімає вибір.
@@ -7809,7 +7816,7 @@ function samEnsureChatListReactionPreviewFix() {
     samSafeAppendStyleElement(style);
   }
 
-  const reactionTextPattern = /(відреагу|reacted)/i;
+  const reactionTextPattern = /(реакц|відреагу|reacted|reaction)/i;
   const emojiPattern = /\p{Extended_Pictographic}|\p{Emoji_Presentation}/u;
 
   const isReactionPreviewText = (text) => {
@@ -7853,6 +7860,49 @@ function samEnsureChatListReactionPreviewFix() {
     }
   };
 
+  const findReactionStatusElement = (row) => {
+    const legacy =
+      row.querySelector('[data-testid="cell-frame-secondary"] [data-testid="last-msg-status"]')
+      || row.querySelector('[data-testid="last-msg-status"]')
+      || row.querySelector('[data-testid="cell-frame-secondary"]');
+
+    if (legacy) {
+      return legacy;
+    }
+
+    const candidates = Array.from(row.querySelectorAll('span, div'))
+      .filter((element) => {
+        const text = String(element.innerText || element.textContent || '')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (!isReactionPreviewText(text)) {
+          return false;
+        }
+
+        const rect = element.getBoundingClientRect();
+
+        if (
+          rect.width < 8 ||
+          rect.height < 10 ||
+          rect.width > 260 ||
+          rect.height > 26
+        ) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const ar = a.getBoundingClientRect();
+        const br = b.getBoundingClientRect();
+
+        return (ar.width * ar.height) - (br.width * br.height);
+      });
+
+    return candidates[0] || null;
+  };
+
   const markRows = () => {
     const roots = [
       document.querySelector('#pane-side'),
@@ -7872,10 +7922,7 @@ function samEnsureChatListReactionPreviewFix() {
 
         row.setAttribute('data-sam-reaction-preview-row', '1');
 
-        const status =
-          row.querySelector('[data-testid="cell-frame-secondary"] [data-testid="last-msg-status"]')
-          || row.querySelector('[data-testid="last-msg-status"]')
-          || row.querySelector('[data-testid="cell-frame-secondary"]');
+        const status = findReactionStatusElement(row);
 
         if (!status) {
           continue;
