@@ -1,3 +1,22 @@
+function samSafeAppendStyleElement(style) {
+  const host = document.head || document.documentElement || document.body;
+
+  if (!host) {
+    window.setTimeout(() => {
+      samSafeAppendStyleElement(style);
+    }, 100);
+
+    return false;
+  }
+
+  if (style && !style.parentNode) {
+    host.appendChild(style);
+  }
+
+  return true;
+}
+
+
 const { ipcRenderer, contextBridge } = require('electron');
 
 const state = {
@@ -927,7 +946,7 @@ function samEnsureGroupHeaderMenuButtonFix() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 
@@ -1888,7 +1907,7 @@ function samPinsEnsureStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 
@@ -2842,7 +2861,7 @@ function samSplitterV4SuppressResidualOldBoundary(layout) {
         background: transparent !important;
       }
     `;
-    (document.head || document.documentElement || document.body).appendChild(style);
+    samSafeAppendStyleElement(style);
   }
 
   for (const el of [leftPane, rightPane]) {
@@ -2965,7 +2984,7 @@ function samGroupHeaderMenuFixStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samSplitterV4EnsureStyle() {
@@ -3013,7 +3032,7 @@ function samSplitterV4EnsureStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samSplitterV4Place() {
@@ -3200,7 +3219,7 @@ function samEnsureGroupParticipantsClipFix() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 
@@ -3271,7 +3290,7 @@ function samEnsureHideGroupParticipantsHeader() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 
@@ -3319,7 +3338,7 @@ function samEnsureCompactViewStyle() {
     /* Праве поле #main більше не стискаємо: це ламало перехід до цитованих повідомлень. */
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 
@@ -3419,7 +3438,7 @@ function samEnsureChatListPolishStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 const SAM_REACTION_TONE_MODIFIER_RE = /[🏻🏼🏽🏾🏿]/gu;
@@ -3672,7 +3691,7 @@ function samEnsureChatRowAvatarCompactStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samChatRowsSpacingV3GetRows() {
@@ -3833,7 +3852,7 @@ function samEnsureReactionPreviewEmojiSizeStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samFixReactionPreviewEmojiSizesOnce() {
@@ -3955,7 +3974,7 @@ function samEnsureAllChatListEmojiSizeStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samFixAllChatListEmojiSizesOnce() {
@@ -4081,7 +4100,7 @@ function samEnsureDrawerMiddleBorderFixStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samFixDrawerMiddleBorderOnce() {
@@ -4457,7 +4476,7 @@ function samNotesEnsureStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samNotesRenderList() {
@@ -5237,7 +5256,7 @@ function samNotesEnsureSaveMenuStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samNotesPatchOpenMessageMenuOnce() {
@@ -5462,7 +5481,7 @@ function samNotesEnsureSelectionBarButtonStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samNotesEnsureSelectionBarButton() {
@@ -5808,7 +5827,7 @@ function samNotesEnsureFeatureStyle() {
     }
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 function samNotesEnsureExtraControls() {
@@ -6458,7 +6477,7 @@ function samEnsureUltraCompactViewStyle() {
     /* Праве поле #main більше не стискаємо: це ламало перехід до цитованих повідомлень. */
   `;
 
-  (document.head || document.documentElement || document.body).appendChild(style);
+  samSafeAppendStyleElement(style);
 }
 
 
@@ -7357,6 +7376,51 @@ function samUnreadCountFromTitle() {
   return samUnreadNormalizeCount(match[1]);
 }
 
+function samUnreadCountFromFilterButton() {
+  const candidates = Array.from(document.querySelectorAll(
+    '[data-testid="filter-button"], button[role="tab"], [role="tab"], button, [role="button"]'
+  ));
+
+  for (const element of candidates) {
+    const rect = element.getBoundingClientRect();
+
+    if (rect.width < 20 || rect.height < 10) {
+      continue;
+    }
+
+    const text = String(element.innerText || element.textContent || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const aria = String(element.getAttribute('aria-label') || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const value = `${text} ${aria}`.trim();
+
+    if (!/(непрочитан|unread)/i.test(value)) {
+      continue;
+    }
+
+    const match = value.match(/(?:непрочитан\S*|unread)\s+([0-9]+)/i)
+      || value.match(/([0-9]+)\s+(?:непрочитан\S*|unread)/i)
+      || value.match(/([0-9]+)/);
+
+    if (!match) {
+      continue;
+    }
+
+    const count = samUnreadNormalizeCount(match[1]);
+
+    if (count > 0) {
+      return count;
+    }
+  }
+
+  return 0;
+}
+
+
 function samUnreadCountFromDom() {
   const selectors = [
     '[aria-label*="unread" i]',
@@ -7394,6 +7458,12 @@ function samUnreadCountFromDom() {
 }
 
 function samUnreadGetCurrentCount() {
+  const filterCount = samUnreadCountFromFilterButton();
+
+  if (filterCount > 0) {
+    return filterCount;
+  }
+
   const titleCount = samUnreadCountFromTitle();
 
   if (titleCount > 0) {
@@ -7574,7 +7644,7 @@ function samEnsureChatListReactionPreviewFix() {
       }
     `;
 
-    styleHost.appendChild(style);
+    samSafeAppendStyleElement(style);
   }
 
   const reactionTextPattern = /(відреагу|reacted)/i;
