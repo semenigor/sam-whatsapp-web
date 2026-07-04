@@ -1756,6 +1756,7 @@ function samPinsEnsureStyle() {
     }
 
     .sam-local-pins-trigger-badge {
+      display: none !important;
       position: absolute;
       z-index: 2;
       top: -5px;
@@ -1933,7 +1934,6 @@ function samPinsEnsurePanel() {
     trigger.title = 'SAM закріплені чати';
     trigger.innerHTML = `
       <span class="sam-local-pins-trigger-icon">📌</span>
-      <span class="sam-local-pins-trigger-badge" id="samLocalPinsTriggerBadge">0/7</span>
     `;
 
     document.body.appendChild(trigger);
@@ -2090,14 +2090,8 @@ function samPinsRender() {
   const count = drawer.querySelector('#samLocalPinsCount');
   const list = drawer.querySelector('#samLocalPinsList');
 
-  const triggerBadge = trigger.querySelector('#samLocalPinsTriggerBadge');
-
-  if (triggerBadge) {
-    triggerBadge.textContent = `${chats.length}/${SAM_LOCAL_PINNED_MAX}`;
-  }
-
   trigger.classList.toggle('sam-local-pins-open', !samPinsIsCollapsed());
-  trigger.title = `SAM закріплені чати: ${chats.length}/${SAM_LOCAL_PINNED_MAX}`;
+  trigger.title = 'SAM закріплені чати';
 
   count.textContent = `${chats.length}/${SAM_LOCAL_PINNED_MAX}`;
   list.innerHTML = '';
