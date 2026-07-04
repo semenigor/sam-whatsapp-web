@@ -7493,15 +7493,11 @@ if (document.readyState === 'loading') {
   samDecryptStartButton();
 }
 
-if (!window.__samFloatingUiVisibilityWatcherBootScheduled) {
-  window.__samFloatingUiVisibilityWatcherBootScheduled = true;
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', samStartFloatingUiVisibilityWatcher, { once: true });
-  } else {
-    samStartFloatingUiVisibilityWatcher();
-  }
-}
+/*
+  SAM floating UI visibility watcher disabled.
+  Reason: full-DOM MutationObserver can slow WhatsApp Web message sending.
+  The sidebar buttons stay enabled; they just will not auto-hide over media viewer for now.
+*/
 
 
 const SAM_UNREAD_BADGE_WATCHER_ID = 'sam-unread-badge-watcher-v1';
