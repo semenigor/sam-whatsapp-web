@@ -927,7 +927,7 @@ function samEnsureGroupHeaderMenuButtonFix() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 
@@ -1888,7 +1888,7 @@ function samPinsEnsureStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 
@@ -2842,7 +2842,7 @@ function samSplitterV4SuppressResidualOldBoundary(layout) {
         background: transparent !important;
       }
     `;
-    document.documentElement.appendChild(style);
+    (document.head || document.documentElement || document.body).appendChild(style);
   }
 
   for (const el of [leftPane, rightPane]) {
@@ -2965,7 +2965,7 @@ function samGroupHeaderMenuFixStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samSplitterV4EnsureStyle() {
@@ -3013,7 +3013,7 @@ function samSplitterV4EnsureStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samSplitterV4Place() {
@@ -3200,7 +3200,7 @@ function samEnsureGroupParticipantsClipFix() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 
@@ -3271,7 +3271,7 @@ function samEnsureHideGroupParticipantsHeader() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 
@@ -3319,7 +3319,7 @@ function samEnsureCompactViewStyle() {
     /* Праве поле #main більше не стискаємо: це ламало перехід до цитованих повідомлень. */
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 
@@ -3419,7 +3419,7 @@ function samEnsureChatListPolishStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 const SAM_REACTION_TONE_MODIFIER_RE = /[🏻🏼🏽🏾🏿]/gu;
@@ -3672,7 +3672,7 @@ function samEnsureChatRowAvatarCompactStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samChatRowsSpacingV3GetRows() {
@@ -3833,7 +3833,7 @@ function samEnsureReactionPreviewEmojiSizeStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samFixReactionPreviewEmojiSizesOnce() {
@@ -3955,7 +3955,7 @@ function samEnsureAllChatListEmojiSizeStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samFixAllChatListEmojiSizesOnce() {
@@ -4081,7 +4081,7 @@ function samEnsureDrawerMiddleBorderFixStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samFixDrawerMiddleBorderOnce() {
@@ -4457,7 +4457,7 @@ function samNotesEnsureStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samNotesRenderList() {
@@ -5237,7 +5237,7 @@ function samNotesEnsureSaveMenuStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samNotesPatchOpenMessageMenuOnce() {
@@ -5462,7 +5462,7 @@ function samNotesEnsureSelectionBarButtonStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samNotesEnsureSelectionBarButton() {
@@ -5808,7 +5808,7 @@ function samNotesEnsureFeatureStyle() {
     }
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 function samNotesEnsureExtraControls() {
@@ -6458,7 +6458,7 @@ function samEnsureUltraCompactViewStyle() {
     /* Праве поле #main більше не стискаємо: це ламало перехід до цитованих повідомлень. */
   `;
 
-  document.documentElement.appendChild(style);
+  (document.head || document.documentElement || document.body).appendChild(style);
 }
 
 
@@ -7484,3 +7484,221 @@ if (!window[SAM_UNREAD_BADGE_WATCHER_ID]) {
   }
 }
 
+
+
+
+
+
+// ===== SAM chat list reaction preview overlap fix =====
+// Scope: only #pane-side / #side chat list.
+// For rows like "Ви відреагували на: ...", hide the long preview and show only a compact emoji.
+function samEnsureChatListReactionPreviewFix() {
+  const styleHost = document.head || document.documentElement || document.body;
+
+  if (!styleHost) {
+    return;
+  }
+
+  if (!document.getElementById('samChatListReactionPreviewFixStyle')) {
+    const style = document.createElement('style');
+    style.id = 'samChatListReactionPreviewFixStyle';
+    style.textContent = `
+      #pane-side [data-sam-reaction-preview-row="1"],
+      #side [data-sam-reaction-preview-row="1"] {
+        min-height: 72px !important;
+        height: 72px !important;
+        overflow: hidden !important;
+      }
+
+      #pane-side [data-sam-reaction-preview-row="1"] [data-testid="cell-frame-container"],
+      #side [data-sam-reaction-preview-row="1"] [data-testid="cell-frame-container"] {
+        min-height: 72px !important;
+        height: 72px !important;
+        overflow: hidden !important;
+      }
+
+      #pane-side [data-sam-reaction-preview-row="1"] [data-testid="cell-frame-secondary"],
+      #side [data-sam-reaction-preview-row="1"] [data-testid="cell-frame-secondary"] {
+        min-width: 0 !important;
+        max-width: calc(100% - 34px) !important;
+        overflow: hidden !important;
+        position: relative !important;
+        z-index: 1 !important;
+      }
+
+      #pane-side [data-sam-reaction-status="1"],
+      #side [data-sam-reaction-status="1"] {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        width: 24px !important;
+        min-width: 24px !important;
+        max-width: 24px !important;
+        height: 20px !important;
+        min-height: 20px !important;
+        max-height: 20px !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        font-size: 0 !important;
+        line-height: 20px !important;
+        color: transparent !important;
+      }
+
+      #pane-side [data-sam-reaction-status="1"] *,
+      #side [data-sam-reaction-status="1"] * {
+        display: none !important;
+      }
+
+      #pane-side [data-sam-reaction-status="1"]::before,
+      #side [data-sam-reaction-status="1"]::before {
+        content: attr(data-sam-reaction-emoji);
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 20px !important;
+        min-width: 20px !important;
+        max-width: 20px !important;
+        height: 20px !important;
+        min-height: 20px !important;
+        max-height: 20px !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        color: initial !important;
+        font-size: 16px !important;
+        line-height: 20px !important;
+      }
+
+      #pane-side [data-sam-reaction-preview-row="1"] [aria-label*="Закріп" i],
+      #side [data-sam-reaction-preview-row="1"] [aria-label*="Закріп" i] {
+        flex: 0 0 auto !important;
+      }
+    `;
+
+    styleHost.appendChild(style);
+  }
+
+  const reactionTextPattern = /(відреагу|reacted)/i;
+  const emojiPattern = /\p{Extended_Pictographic}|\p{Emoji_Presentation}/u;
+
+  const isReactionPreviewText = (text) => {
+    return reactionTextPattern.test(String(text || ''));
+  };
+
+  const extractEmoji = (row, status) => {
+    const roots = [status, row].filter(Boolean);
+
+    for (const root of roots) {
+      const images = Array.from(root.querySelectorAll('img[alt]'));
+
+      for (const image of images) {
+        const alt = String(image.getAttribute('alt') || '').trim();
+
+        if (emojiPattern.test(alt)) {
+          return alt;
+        }
+      }
+
+      const text = String(root.textContent || root.innerText || '');
+      const match = text.match(emojiPattern);
+
+      if (match && match[0]) {
+        return match[0];
+      }
+    }
+
+    return '👍';
+  };
+
+  const clearRow = (row) => {
+    row.removeAttribute('data-sam-reaction-preview-row');
+
+    const marked = row.querySelectorAll('[data-sam-reaction-status="1"]');
+
+    for (const element of marked) {
+      element.removeAttribute('data-sam-reaction-status');
+      element.removeAttribute('data-sam-reaction-emoji');
+      element.removeAttribute('title');
+    }
+  };
+
+  const markRows = () => {
+    const roots = [
+      document.querySelector('#pane-side'),
+      document.querySelector('#side')
+    ].filter(Boolean);
+
+    for (const root of roots) {
+      const rows = Array.from(root.querySelectorAll('[data-testid^="list-item-"], [role="row"]'));
+
+      for (const row of rows) {
+        const text = String(row.innerText || row.textContent || '');
+
+        if (!isReactionPreviewText(text)) {
+          clearRow(row);
+          continue;
+        }
+
+        row.setAttribute('data-sam-reaction-preview-row', '1');
+
+        const status =
+          row.querySelector('[data-testid="cell-frame-secondary"] [data-testid="last-msg-status"]')
+          || row.querySelector('[data-testid="last-msg-status"]')
+          || row.querySelector('[data-testid="cell-frame-secondary"]');
+
+        if (!status) {
+          continue;
+        }
+
+        const rawPreview = String(status.innerText || status.textContent || row.innerText || row.textContent || '')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        status.setAttribute('data-sam-reaction-status', '1');
+        status.setAttribute('data-sam-reaction-emoji', extractEmoji(row, status));
+        status.setAttribute('title', rawPreview || 'Реакція на повідомлення');
+      }
+    }
+  };
+
+  let scheduled = false;
+
+  const scheduleMarkRows = () => {
+    if (scheduled) {
+      return;
+    }
+
+    scheduled = true;
+
+    window.requestAnimationFrame(() => {
+      scheduled = false;
+      markRows();
+    });
+  };
+
+  markRows();
+
+  if (!window.__samChatListReactionPreviewFixObserver) {
+    const observer = new MutationObserver(scheduleMarkRows);
+
+    observer.observe(document.documentElement, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true
+    });
+
+    window.__samChatListReactionPreviewFixObserver = observer;
+  }
+
+  if (!window.__samChatListReactionPreviewFixInterval) {
+    window.__samChatListReactionPreviewFixInterval = window.setInterval(markRows, 700);
+  }
+}
+
+if (!window.__samChatListReactionPreviewFixScheduled) {
+  window.__samChatListReactionPreviewFixScheduled = true;
+
+  setTimeout(samEnsureChatListReactionPreviewFix, 250);
+  setTimeout(samEnsureChatListReactionPreviewFix, 1000);
+  setTimeout(samEnsureChatListReactionPreviewFix, 2500);
+}
