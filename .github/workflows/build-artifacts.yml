@@ -53,16 +53,23 @@ jobs:
       - name: Build Linux AppImage
         run: npm run dist:linux -- --publish never
 
+      - name: Prepare Linux artifact name
+        run: |
+          PUBLIC_VERSION="$(node -p "require('./package.json').version.replace(/\.0$/, '')")"
+          mkdir -p artifacts
+          APPIMAGE="$(find dist -maxdepth 1 -type f -name '*.AppImage' | head -n 1)"
+          test -n "$APPIMAGE"
+          cp -f "$APPIMAGE" "artifacts/SAM-WhatsApp-Web-${PUBLIC_VERSION}-x86_64.AppImage"
+          cp -f dist/latest-linux.yml artifacts/latest-linux.yml 2>/dev/null || true
+          ls -lh artifacts
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
           path: |
-            dist/*.AppImage
-            dist/latest-linux.yml
-            dist/*.blockmap
-            dist/builder-effective-config.yaml
-          if-no-files-found: warn
+            artifacts/*
+          if-no-files-found: error
 
   windows-portable:
     name: Windows portable
@@ -96,6 +103,7 @@ jobs:
           Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
           Remove-Item -Force sam_encrypt_cli_bin.spec -ErrorAction SilentlyContinue
           Remove-Item -Force sam_encrypt_cli_bin -ErrorAction SilentlyContinue
+          Remove-Item -Force sam_encrypt_cli_bin.exe -ErrorAction SilentlyContinue
 
           python -m PyInstaller `
             --clean `
@@ -113,13 +121,92 @@ jobs:
       - name: Build Windows portable
         run: npm run dist:win -- --publish never
 
+      - name: Prepare Windows artifact name
+        shell: pwsh
+        run: |
+          $publicVersion = node -p "require('./package.json').version.replace(/\.0$/, '')"
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+
+          $exe = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
+          if (-not $exe) {
+            throw "Windows exe artifact not found in dist"
+          }
+
+          Copy-Item $exe.FullName "artifacts\SAM-WhatsApp-Web-$publicVersion-x64.exe" -Force
+
+          Get-ChildItem artifacts | Format-Table Name,Length
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-portable
           path: |
-            dist/*.exe
-            dist/*.yml
-            dist/*.blockmap
-            dist/builder-effective-config.yaml
-          if-no-files-found: warn
+            artifacts/*
+          if-no-files-found: error
+
+  macos-intel:
+    name: macOS Intel x64
+    runs-on: macos-26-intel
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build SAM Encrypt macOS Intel helper
+        working-directory: helpers/sam_encrypt
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "PyNaCl>=1.5" "cffi>=1.16" "pyinstaller>=6.0"
+          rm -rf build dist sam_encrypt_cli_bin.spec sam_encrypt_cli_bin sam_encrypt_cli_bin.exe
+          python -m PyInstaller \
+            --clean \
+            --onefile \
+            --name sam_encrypt_cli_bin \
+            --hidden-import _cffi_backend \
+            --collect-all cffi \
+            --collect-all nacl \
+            sam_encrypt_cli.py
+          cp dist/sam_encrypt_cli_bin ./sam_encrypt_cli_bin
+          chmod +x ./sam_encrypt_cli_bin
+          ls -lh ./sam_encrypt_cli_bin
+          file ./sam_encrypt_cli_bin
+          lipo -archs ./sam_encrypt_cli_bin || true
+
+      - name: Build macOS Intel app directory
+        run: npx electron-builder --mac dir --x64 --publish never
+
+      - name: Prepare macOS Intel artifact name
+        run: |
+          PUBLIC_VERSION="$(node -p "require('./package.json').version.replace(/\.0$/, '')")"
+          APP_PATH="$(find dist -maxdepth 4 -type d -name '*.app' | head -n 1)"
+          test -n "$APP_PATH"
+
+          mkdir -p artifacts
+
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$APP_PATH" \
+            "artifacts/SAM-WhatsApp-Web-${PUBLIC_VERSION}-mac-x64.app.zip"
+
+          ls -lh artifacts
+
+      - name: Upload macOS Intel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel
+          path: |
+            artifacts/*
+          if-no-files-found: error
