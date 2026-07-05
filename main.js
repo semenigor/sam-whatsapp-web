@@ -161,7 +161,11 @@ function registerSamUnreadBadgeIpcHandlers() {
 
 
 function getAppWindowTitle() {
-  return `${APP_NAME} v${app.getVersion()}`;
+  return `${APP_NAME} v${getPublicAppVersion()}`;
+}
+
+function getPublicAppVersion() {
+  return String(app.getVersion() || '').replace(/\.0$/, '');
 }
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
 const CHROME_USER_AGENT = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
@@ -598,16 +602,32 @@ function registerMessageCopyIpcHandlers() {
 const SAM_HELP_TEXT = `
 SAM WhatsApp Web
 
-Це програма для роботи з WhatsApp Web у вигляді окремого вікна Linux-програми.
+Це програма для роботи з WhatsApp Web у вигляді окремого desktop-вікна з додатковими SAM-функціями.
 
 Основні можливості:
 
-1. Вхід у WhatsApp
+1. SAM Encrypt
+
+Кнопка SAM Encrypt розташована зліва у вертикальній панелі WhatsApp.
+
+Основний сценарій:
+- натиснути кнопку SAM Encrypt;
+- вибрати файл;
+- вибрати отримувача або групу отримувачів;
+- програма створить зашифрований файл .samenc;
+- Finder / файловий менеджер відкриє папку з готовим файлом;
+- цей .samenc файл потрібно вручну прикріпити у WhatsApp як документ.
+
+Автоматичне прикріплення до WhatsApp у цій версії не використовується, щоб не втручатися у внутрішній механізм відправки файлів WhatsApp Web.
+
+Отримані .samenc файли після завантаження автоматично розшифровуються, якщо на цьому компʼютері є відповідний приватний ключ.
+
+2. Вхід у WhatsApp
 
 Після першого входу через QR-код програма запамʼятовує сесію.
 Під час наступного запуску повторно сканувати QR-код зазвичай не потрібно.
 
-2. Робота з файлами Word та Excel
+3. Робота з файлами Word та Excel
 
 Файли Word, Excel та інші офісні вкладення можна відкривати через LibreOffice або системну програму за замовчуванням.
 Якщо увімкнений попередній перегляд, програма створює PDF-preview і показує документ у внутрішньому вікні.
@@ -617,7 +637,7 @@ SAM WhatsApp Web
 - Показати в папці
 - Закрити
 
-3. Вставка тексту
+4. Вставка тексту
 
 У полі введення повідомлення працює контекстне меню правою кнопкою миші.
 
@@ -633,7 +653,7 @@ SAM WhatsApp Web
 
 Вставити як текст
 
-4. Копіювання кількох повідомлень
+5. Копіювання кількох повідомлень
 
 У чаті відкрийте меню WhatsApp у правому верхньому куті чату.
 У меню доступні пункти:
@@ -656,7 +676,7 @@ SAM: копіювати вибрані
 
 Щоб вийти з режиму вибору, натисніть кнопку "Вийти з режиму" на нижній панелі.
 
-5. SAM-закріплені чати
+6. SAM-закріплені чати
 
 WhatsApp має власне обмеження на кількість офіційно закріплених чатів.
 SAM-закріплення — це окремий локальний список у цій програмі.
@@ -673,7 +693,7 @@ SAM-закріплення — це окремий локальний списо
 Ці закріплення зберігаються локально у програмі.
 Вони не змінюють офіційні закріплення WhatsApp і не синхронізуються з телефоном.
 
-6. Зміна ширини списку чатів
+7. Зміна ширини списку чатів
 
 Межу між списком чатів і відкритим чатом можна перетягувати мишею.
 
@@ -683,7 +703,7 @@ SAM-закріплення — це окремий локальний списо
 
 Ширина зберігається після перезапуску програми.
 
-7. Вікно програми
+8. Вікно програми
 
 Вікно можна:
 - змінювати за розміром;
@@ -694,7 +714,7 @@ SAM-закріплення — це окремий локальний списо
 Одинарний лівий клік по іконці в треї показує головне вікно.
 Правий клік по іконці в треї відкриває меню програми.
 
-8. Налаштування
+9. Налаштування
 
 У меню програми є пункт "Налаштування".
 
@@ -704,7 +724,7 @@ SAM-закріплення — це окремий локальний списо
 - автоматичним відкриттям офісних файлів;
 - строком зберігання кешу вкладень і preview.
 
-9. Що важливо знати
+10. Що важливо знати
 
 SAM WhatsApp Web не є окремим месенджером.
 Це оболонка над WhatsApp Web із додатковими зручними функціями.
@@ -939,7 +959,7 @@ function createAppMenu() {
               type: 'info',
               title: 'SAM WhatsApp Web',
               message: 'SAM WhatsApp Web',
-              detail: 'Окрема Linux-програма для роботи з WhatsApp Web з додатковими SAM-функціями: копіювання кількох повідомлень, локальні закріплені чати, робота з офісними файлами, вставка як текст та зручне керування вікном.'
+              detail: 'Desktop-програма для роботи з WhatsApp Web з додатковими SAM-функціями: SAM Encrypt, автоматичне розшифрування .samenc, копіювання кількох повідомлень, локальні закріплені чати, робота з офісними файлами, вставка як текст та зручне керування вікном.'
             });
           }
         }
@@ -2018,7 +2038,6 @@ app.whenReady().then(() => {
   registerNotesIpcHandlers();
     registerPreviewIpcHandlers();
   registerSamEncryptIpcHandlers();
-  registerSamEncryptFileIpcHandlers();
   registerSamEncryptSettingsIpcHandlers();
   registerSamUnreadBadgeIpcHandlers();
     createAppMenu();
@@ -2528,47 +2547,6 @@ async function chooseFileAndEncrypt(payload = {}) {
 }
 
 
-async function chooseFileAndEncryptSelf(payload = {}) {
-  const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
-
-  const dialogResult = await dialog.showOpenDialog(ownerWindow, {
-    title: 'Вибрати файл для шифрування',
-    properties: ['openFile'],
-    buttonLabel: 'Зашифрувати'
-  });
-
-  if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
-    return {
-      ok: false,
-      cancelled: true,
-      error: null
-    };
-  }
-
-  const inputPath = dialogResult.filePaths[0];
-  const outputDir = payload.outputDir
-    ? String(payload.outputDir)
-    : getSamEncryptOutboxDir();
-
-  const result = await runSamEncryptCli([
-    'encrypt-self',
-    '--input',
-    inputPath,
-    '--output-dir',
-    outputDir
-  ]);
-
-  if (result && result.ok && result.output_path && payload.revealInFolder) {
-    shell.showItemInFolder(result.output_path);
-  }
-
-  return {
-    ...result,
-    inputPath,
-    outputDir,
-    revealInFolder: Boolean(payload.revealInFolder)
-  };
-}
 
 
 function getSamEncryptDecryptedDir() {
@@ -2577,51 +2555,6 @@ function getSamEncryptDecryptedDir() {
   return decryptedDir;
 }
 
-async function chooseFileAndDecrypt(payload = {}) {
-  const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
-
-  const dialogResult = await dialog.showOpenDialog(ownerWindow, {
-    title: 'Вибрати .samenc файл для розшифрування',
-    properties: ['openFile'],
-    filters: [
-      { name: 'SAM Encrypt files', extensions: ['samenc'] },
-      { name: 'All files', extensions: ['*'] }
-    ],
-    buttonLabel: 'Розшифрувати'
-  });
-
-  if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
-    return {
-      ok: false,
-      cancelled: true,
-      error: null
-    };
-  }
-
-  const inputPath = dialogResult.filePaths[0];
-  const outputDir = payload.outputDir
-    ? String(payload.outputDir)
-    : getSamEncryptDecryptedDir();
-
-  const result = await runSamEncryptCli([
-    'decrypt',
-    '--input',
-    inputPath,
-    '--output-dir',
-    outputDir
-  ]);
-
-  if (result && result.ok && result.output_path && payload.revealInFolder) {
-    shell.showItemInFolder(result.output_path);
-  }
-
-  return {
-    ...result,
-    inputPath,
-    outputDir,
-    revealInFolder: Boolean(payload.revealInFolder)
-  };
-}
 
 
 function registerSamEncryptSettingsIpcHandlers() {
@@ -2817,13 +2750,4 @@ function registerSamEncryptSettingsIpcHandlers() {
   });
 }
 
-function registerSamEncryptFileIpcHandlers() {
-  ipcMain.handle('sam-encrypt:choose-file-and-encrypt-self', async (_event, payload = {}) => {
-    return chooseFileAndEncryptSelf(payload || {});
-  });
-
-  ipcMain.handle('sam-encrypt:choose-file-and-decrypt', async (_event, payload = {}) => {
-    return chooseFileAndDecrypt(payload || {});
-  });
-}
 

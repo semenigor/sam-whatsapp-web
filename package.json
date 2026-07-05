@@ -1,6 +1,6 @@
 {
   "name": "sam-whatsapp-web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Linux Electron wrapper for WhatsApp Web",
   "main": "main.js",
   "private": true,
@@ -13,7 +13,8 @@
     "dist:linux": "electron-builder --linux AppImage",
     "dist:mac:dir": "electron-builder --mac dir --arm64",
     "dist:mac": "electron-builder --mac dmg --arm64",
-    "dist:win": "electron-builder --win portable --x64"
+    "dist:win": "electron-builder --win portable --x64",
+    "dist:linux:deb": "electron-builder --linux deb --x64"
   },
   "build": {
     "appId": "com.semenigor.samwhatsappweb",
@@ -35,6 +36,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "Network",
@@ -42,7 +49,17 @@
       "executableName": "sam-whatsapp-web",
       "synopsis": "WhatsApp Web Linux wrapper",
       "description": "Electron wrapper for WhatsApp Web on Linux",
-      "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.${ext}"
+      "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.${ext}",
+      "desktop": {
+        "entry": {
+          "Name": "SAM WhatsApp Web",
+          "Comment": "WhatsApp Web wrapper with SAM tools",
+          "Categories": "Network;InstantMessaging;",
+          "StartupWMClass": "SAM WhatsApp Web",
+          "Terminal": "false"
+        }
+      },
+      "maintainer": "SAM WhatsApp Web Maintainers <semenigor@users.noreply.github.com>"
     },
     "appImage": {
       "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.${ext}"
@@ -81,7 +98,29 @@
           "!*.spec"
         ]
       }
-    ]
+    ],
+    "deb": {
+      "packageName": "sam-whatsapp-web",
+      "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.deb",
+      "packageCategory": "net",
+      "priority": "optional",
+      "afterInstall": "build/linux/deb-after-install.sh",
+      "afterRemove": "build/linux/deb-after-remove.sh",
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0"
+      ],
+      "recommends": [
+        "libappindicator3-1"
+      ]
+    }
   },
   "devDependencies": {
     "electron": "34.5.8",

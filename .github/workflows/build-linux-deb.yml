@@ -1,0 +1,58 @@
+name: Build Linux DEB
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-linux-deb:
+    name: Build Linux DEB
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg rpm file
+
+      - name: Install npm dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Control checks
+        run: |
+          node --check main.js
+          bash -n build/linux/deb-after-install.sh
+          bash -n build/linux/deb-after-remove.sh
+          ! grep -RInE "DataTransfer|input\\[type=file\\]|filechooser|webContents\\.debugger|auto-attach|drag-and-drop|CDP" main.js wa_preload.js settings_preload.js preview_preload.js
+
+      - name: Build DEB
+        run: npm run dist:linux:deb
+
+      - name: Validate DEB
+        run: |
+          DEB_FILE="$(find dist -maxdepth 1 -type f -name '*.deb' | head -n 1)"
+          test -n "$DEB_FILE"
+          file "$DEB_FILE"
+          test "$(stat -c '%s' "$DEB_FILE")" -gt 1000000
+          dpkg-deb --info "$DEB_FILE"
+          dpkg-deb --contents "$DEB_FILE" | head -80
+
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sam-whatsapp-web-deb
+          path: dist/*.deb
+          if-no-files-found: error
