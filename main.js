@@ -2550,47 +2550,6 @@ async function chooseFileAndEncrypt(payload = {}) {
 }
 
 
-async function chooseFileAndEncryptSelf(payload = {}) {
-  const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
-
-  const dialogResult = await dialog.showOpenDialog(ownerWindow, {
-    title: 'Вибрати файл для шифрування',
-    properties: ['openFile'],
-    buttonLabel: 'Зашифрувати'
-  });
-
-  if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
-    return {
-      ok: false,
-      cancelled: true,
-      error: null
-    };
-  }
-
-  const inputPath = dialogResult.filePaths[0];
-  const outputDir = payload.outputDir
-    ? String(payload.outputDir)
-    : getSamEncryptOutboxDir();
-
-  const result = await runSamEncryptCli([
-    'encrypt-self',
-    '--input',
-    inputPath,
-    '--output-dir',
-    outputDir
-  ]);
-
-  if (result && result.ok && result.output_path && payload.revealInFolder) {
-    shell.showItemInFolder(result.output_path);
-  }
-
-  return {
-    ...result,
-    inputPath,
-    outputDir,
-    revealInFolder: Boolean(payload.revealInFolder)
-  };
-}
 
 
 function getSamEncryptDecryptedDir() {
@@ -2599,51 +2558,6 @@ function getSamEncryptDecryptedDir() {
   return decryptedDir;
 }
 
-async function chooseFileAndDecrypt(payload = {}) {
-  const ownerWindow = BrowserWindow.getFocusedWindow() || mainWindow || undefined;
-
-  const dialogResult = await dialog.showOpenDialog(ownerWindow, {
-    title: 'Вибрати .samenc файл для розшифрування',
-    properties: ['openFile'],
-    filters: [
-      { name: 'SAM Encrypt files', extensions: ['samenc'] },
-      { name: 'All files', extensions: ['*'] }
-    ],
-    buttonLabel: 'Розшифрувати'
-  });
-
-  if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length < 1) {
-    return {
-      ok: false,
-      cancelled: true,
-      error: null
-    };
-  }
-
-  const inputPath = dialogResult.filePaths[0];
-  const outputDir = payload.outputDir
-    ? String(payload.outputDir)
-    : getSamEncryptDecryptedDir();
-
-  const result = await runSamEncryptCli([
-    'decrypt',
-    '--input',
-    inputPath,
-    '--output-dir',
-    outputDir
-  ]);
-
-  if (result && result.ok && result.output_path && payload.revealInFolder) {
-    shell.showItemInFolder(result.output_path);
-  }
-
-  return {
-    ...result,
-    inputPath,
-    outputDir,
-    revealInFolder: Boolean(payload.revealInFolder)
-  };
-}
 
 
 function registerSamEncryptSettingsIpcHandlers() {
@@ -2840,12 +2754,5 @@ function registerSamEncryptSettingsIpcHandlers() {
 }
 
 function registerSamEncryptFileIpcHandlers() {
-  ipcMain.handle('sam-encrypt:choose-file-and-encrypt-self', async (_event, payload = {}) => {
-    return chooseFileAndEncryptSelf(payload || {});
-  });
-
-  ipcMain.handle('sam-encrypt:choose-file-and-decrypt', async (_event, payload = {}) => {
-    return chooseFileAndDecrypt(payload || {});
-  });
 }
 

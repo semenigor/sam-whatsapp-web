@@ -6372,8 +6372,6 @@ try {
       inputPath,
       outputDir
     }),
-    chooseFileAndEncryptSelf: (options = {}) => ipcRenderer.invoke('sam-encrypt:choose-file-and-encrypt-self', options || {}),
-    chooseFileAndDecrypt: (options = {}) => ipcRenderer.invoke('sam-encrypt:choose-file-and-decrypt', options || {})
   };
 
   let exposed = false;
