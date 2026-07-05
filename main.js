@@ -161,13 +161,11 @@ function registerSamUnreadBadgeIpcHandlers() {
 
 
 function getAppWindowTitle() {
-  return `${APP_NAME} v${app.getVersion()}`;
+  return `${APP_NAME} v${getPublicAppVersion()}`;
 }
 
-const APP_MAIN_WINDOW_CHANNEL_LABEL = '0.3 CLEAN';
-
-function getMainWindowTitle() {
-  return `${getAppWindowTitle()} — ${APP_MAIN_WINDOW_CHANNEL_LABEL}`;
+function getPublicAppVersion() {
+  return String(app.getVersion() || '').replace(/\.0$/, '');
 }
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
 const CHROME_USER_AGENT = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`;
@@ -994,7 +992,7 @@ function showMainWindowFromTray() {
   }
 
   mainWindow.focus();
-  mainWindow.setTitle(getMainWindowTitle());
+  mainWindow.setTitle(getAppWindowTitle());
 }
 
 function createTray() {
@@ -1695,7 +1693,7 @@ function createMainWindow() {
     height: 820,
     minWidth: 560,
     minHeight: 420,
-    title: getMainWindowTitle(),
+    title: getAppWindowTitle(),
     icon: getIconPath(),
     show: false,
     webPreferences: {
@@ -1713,11 +1711,11 @@ function createMainWindow() {
     console.log('[SAM] DIAGNOSTIC SAFE MODE: wa_preload.js disabled');
   }
 
-  mainWindow.setTitle(getMainWindowTitle());
+  mainWindow.setTitle(getAppWindowTitle());
 
   mainWindow.webContents.on('page-title-updated', (event) => {
     event.preventDefault();
-    mainWindow.setTitle(getMainWindowTitle());
+    mainWindow.setTitle(getAppWindowTitle());
   });
 
   mainWindow.setResizable(true);
