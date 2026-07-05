@@ -58,7 +58,8 @@
           "StartupWMClass": "SAM WhatsApp Web",
           "Terminal": "false"
         }
-      }
+      },
+      "maintainer": "SAM WhatsApp Web Maintainers <semenigor@users.noreply.github.com>"
     },
     "appImage": {
       "artifactName": "SAM-WhatsApp-Web-${version}-${arch}.${ext}"
