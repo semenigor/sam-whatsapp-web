@@ -2040,7 +2040,6 @@ app.whenReady().then(() => {
   registerNotesIpcHandlers();
     registerPreviewIpcHandlers();
   registerSamEncryptIpcHandlers();
-  registerSamEncryptFileIpcHandlers();
   registerSamEncryptSettingsIpcHandlers();
   registerSamUnreadBadgeIpcHandlers();
     createAppMenu();
@@ -2753,6 +2752,4 @@ function registerSamEncryptSettingsIpcHandlers() {
   });
 }
 
-function registerSamEncryptFileIpcHandlers() {
-}
 
