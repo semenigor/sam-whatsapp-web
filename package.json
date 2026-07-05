@@ -14,7 +14,7 @@
     "dist:mac:dir": "electron-builder --mac dir --arm64",
     "dist:mac": "electron-builder --mac dmg --arm64",
     "dist:win": "electron-builder --win portable --x64",
-    "dist:linux:deb": "electron-builder --linux deb --x64"
+    "dist:linux:deb": "electron-builder --linux deb --x64 --publish never"
   },
   "build": {
     "appId": "com.semenigor.samwhatsappweb",
