@@ -45,6 +45,9 @@ jobs:
             --clean \
             --onefile \
             --name sam_encrypt_cli_bin \
+            --hidden-import _cffi_backend \
+            --collect-all cffi \
+            --collect-all nacl \
             --distpath helpers/sam_encrypt \
             --workpath "$RUNNER_TEMP/sam-encrypt-cli-build" \
             --specpath "$RUNNER_TEMP/sam-encrypt-cli-spec" \
