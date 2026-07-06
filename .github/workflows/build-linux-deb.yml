@@ -85,7 +85,9 @@ jobs:
           test "$(stat -c '%s' "$DEB_FILE")" -gt 1000000
 
           dpkg-deb --info "$DEB_FILE"
-          dpkg-deb --contents "$DEB_FILE" | head -80
+          DEB_CONTENTS="$RUNNER_TEMP/deb-contents.txt"
+          dpkg-deb --contents "$DEB_FILE" > "$DEB_CONTENTS"
+          sed -n '1,80p' "$DEB_CONTENTS"
 
           EXTRACT_DIR="$RUNNER_TEMP/deb-root"
           mkdir -p "$EXTRACT_DIR"
