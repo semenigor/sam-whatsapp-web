@@ -3,8 +3,16 @@ set -e
 
 APP_ID="sam-whatsapp-web"
 APP_NAME="SAM WhatsApp Web"
+
+APP_EXEC="/opt/SAM WhatsApp Web/${APP_ID}"
+BIN_LINK="/usr/bin/${APP_ID}"
+
 AUTOSTART_DIR="/etc/xdg/autostart"
 AUTOSTART_FILE="${AUTOSTART_DIR}/${APP_ID}.desktop"
+
+if [ -x "$APP_EXEC" ]; then
+  ln -sfn "$APP_EXEC" "$BIN_LINK"
+fi
 
 mkdir -p "$AUTOSTART_DIR"
 
@@ -13,7 +21,7 @@ cat > "$AUTOSTART_FILE" <<DESKTOP
 Type=Application
 Name=${APP_NAME}
 Comment=WhatsApp Web wrapper with SAM tools
-Exec=/usr/bin/${APP_ID}
+Exec=${BIN_LINK}
 Icon=${APP_ID}
 Terminal=false
 Categories=Network;InstantMessaging;

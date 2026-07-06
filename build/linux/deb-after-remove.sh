@@ -2,7 +2,13 @@
 set -e
 
 APP_ID="sam-whatsapp-web"
+
+BIN_LINK="/usr/bin/${APP_ID}"
 AUTOSTART_FILE="/etc/xdg/autostart/${APP_ID}.desktop"
+
+if [ -L "$BIN_LINK" ]; then
+  rm -f "$BIN_LINK"
+fi
 
 rm -f "$AUTOSTART_FILE"
 

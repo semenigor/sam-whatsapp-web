@@ -21,7 +21,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y fakeroot dpkg rpm file
+          sudo apt-get install -y fakeroot dpkg rpm file python3 python3-venv python3-pip
 
       - name: Install npm dependencies
         run: |
@@ -30,6 +30,36 @@ jobs:
           else
             npm install
           fi
+
+      - name: Build Linux SAM Encrypt CLI
+        run: |
+          set -euo pipefail
+
+          python3 -m venv "$RUNNER_TEMP/sam-encrypt-cli-venv"
+          "$RUNNER_TEMP/sam-encrypt-cli-venv/bin/python" -m pip install --upgrade pip wheel
+          "$RUNNER_TEMP/sam-encrypt-cli-venv/bin/python" -m pip install -r helpers/sam_encrypt/requirements.txt pyinstaller
+
+          rm -f helpers/sam_encrypt/sam_encrypt_cli_bin
+
+          "$RUNNER_TEMP/sam-encrypt-cli-venv/bin/python" -m PyInstaller \
+            --clean \
+            --onefile \
+            --name sam_encrypt_cli_bin \
+            --distpath helpers/sam_encrypt \
+            --workpath "$RUNNER_TEMP/sam-encrypt-cli-build" \
+            --specpath "$RUNNER_TEMP/sam-encrypt-cli-spec" \
+            helpers/sam_encrypt/sam_encrypt_cli.py
+
+          chmod 0755 helpers/sam_encrypt/sam_encrypt_cli_bin
+
+          file helpers/sam_encrypt/sam_encrypt_cli_bin
+          file helpers/sam_encrypt/sam_encrypt_cli_bin | grep -q 'ELF 64-bit'
+
+          SAM_ENCRYPT_HOME="$RUNNER_TEMP/sam-encrypt-home" \
+            helpers/sam_encrypt/sam_encrypt_cli_bin status | python3 -m json.tool
+
+          SAM_ENCRYPT_HOME="$RUNNER_TEMP/sam-encrypt-home" \
+            helpers/sam_encrypt/sam_encrypt_cli_bin list-groups | python3 -m json.tool
 
       - name: Control checks
         run: |
@@ -43,12 +73,26 @@ jobs:
 
       - name: Validate DEB
         run: |
+          set -euo pipefail
+
           DEB_FILE="$(find dist -maxdepth 1 -type f -name '*.deb' | head -n 1)"
           test -n "$DEB_FILE"
+
           file "$DEB_FILE"
           test "$(stat -c '%s' "$DEB_FILE")" -gt 1000000
+
           dpkg-deb --info "$DEB_FILE"
           dpkg-deb --contents "$DEB_FILE" | head -80
+
+          EXTRACT_DIR="$RUNNER_TEMP/deb-root"
+          mkdir -p "$EXTRACT_DIR"
+          dpkg-deb -x "$DEB_FILE" "$EXTRACT_DIR"
+
+          CLI_BIN="$(find "$EXTRACT_DIR" -type f -path '*/resources/helpers/sam_encrypt/sam_encrypt_cli_bin' | head -n 1)"
+          test -n "$CLI_BIN"
+
+          file "$CLI_BIN"
+          file "$CLI_BIN" | grep -q 'ELF 64-bit'
 
       - name: Upload DEB artifact
         uses: actions/upload-artifact@v6
