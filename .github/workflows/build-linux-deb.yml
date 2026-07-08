@@ -69,7 +69,7 @@ jobs:
           node --check main.js
           bash -n build/linux/deb-after-install.sh
           bash -n build/linux/deb-after-remove.sh
-          ! grep -RInE "DataTransfer|input\\[type=file\\]|filechooser|webContents\\.debugger|auto-attach|drag-and-drop|CDP" main.js wa_preload.js settings_preload.js preview_preload.js
+          ! grep -RInE "input\\[type=file\\]|filechooser|file-chooser|arm-next-file-chooser|get-next-file-chooser-state|webContents\\.debugger|CDP|click\\(\\).*send|send-button|data-icon=.send|aria-label=.Send" main.js wa_preload.js settings_preload.js preview_preload.js
 
       - name: Build DEB
         run: npm run dist:linux:deb

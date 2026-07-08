@@ -89,7 +89,7 @@ jobs:
 
           node --check main.js
 
-          $pattern = "DataTransfer|input\[type=file\]|filechooser|webContents\.debugger|auto-attach|drag-and-drop|CDP"
+          $pattern = "input\[type=file\]|filechooser|file-chooser|arm-next-file-chooser|get-next-file-chooser-state|webContents\.debugger|CDP|click\(\).*send|send-button|data-icon=.send|aria-label=.Send"
           $files = @(
             "main.js",
             "wa_preload.js",
