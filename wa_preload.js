@@ -7020,15 +7020,68 @@ function samEncryptFormatDroppedFiles(event) {
   return `${files.length} файлів`;
 }
 
-function samEncryptOnDropDecisionProbe(event) {
+function samEncryptGetDroppedFilePath(file) {
+  if (!file) {
+    return '';
+  }
+
+  if (typeof file.path === 'string' && file.path) {
+    return file.path;
+  }
+
+  try {
+    if (typeof require === 'function') {
+      const electron = require('electron');
+
+      if (electron && electron.webUtils && typeof electron.webUtils.getPathForFile === 'function') {
+        return electron.webUtils.getPathForFile(file) || '';
+      }
+    }
+  } catch (_error) {
+    // Path lookup is best-effort only.
+  }
+
+  try {
+    if (typeof window !== 'undefined' && window.require) {
+      const electron = window.require('electron');
+
+      if (electron && electron.webUtils && typeof electron.webUtils.getPathForFile === 'function') {
+        return electron.webUtils.getPathForFile(file) || '';
+      }
+    }
+  } catch (_error) {
+    // Path lookup is best-effort only.
+  }
+
+  return '';
+}
+
+
+function samEncryptDescribeDroppedFilesForPathProbe(files) {
+  return Array.from(files || []).map((file, index) => {
+    const filePath = samEncryptGetDroppedFilePath(file);
+
+    return {
+      index,
+      name: file && file.name ? file.name : '',
+      size: file && Number.isFinite(file.size) ? file.size : 0,
+      type: file && file.type ? file.type : '',
+      path: filePath,
+      hasPath: Boolean(filePath)
+    };
+  });
+}
+
+async function samEncryptOnDropDecisionProbe(event) {
   if (!samEncryptDropHasFiles(event)) {
     return;
   }
 
-  const droppedFiles = samEncryptFormatDroppedFiles(event);
+  const droppedFileList = Array.from(event.dataTransfer.files || []);
+  const droppedFilesLabel = samEncryptFormatDroppedFiles(event);
 
   const shouldEncrypt = window.confirm(
-    `SAM Encrypt\n\nШифрувати перед прикріпленням?\n\nФайл: ${droppedFiles}\n\nOK — шифрувати\nСкасувати — прикріпити звичайно`
+    `SAM Encrypt\n\nШифрувати перед прикріпленням?\n\nФайл: ${droppedFilesLabel}\n\nOK — шифрувати\nСкасувати — прикріпити звичайно`
   );
 
   if (!shouldEncrypt) {
@@ -7040,7 +7093,66 @@ function samEncryptOnDropDecisionProbe(event) {
   event.stopPropagation();
   event.stopImmediatePropagation();
 
-  samEncryptShowStatus('SAM Encrypt: вибрано шифрування. Наступний крок — шифрування і прикріплення .samenc.');
+  if (droppedFileList.length !== 1) {
+    samEncryptShowStatus('SAM Encrypt: drag-шифрування зараз підтримує тільки один файл за раз.', true);
+    return;
+  }
+
+  const droppedFile = droppedFileList[0];
+  const inputPath = samEncryptGetDroppedFilePath(droppedFile);
+
+  if (!inputPath) {
+    samEncryptShowStatus('SAM Encrypt: не вдалося отримати шлях dropped file. Шифрування неможливе.', true);
+    return;
+  }
+
+  try {
+    const recipientsWarmup = samEncryptRefreshRecipientCache(false).catch((error) => {
+      console.warn('SAM Encrypt recipient cache warmup failed before drag encryption:', error);
+      return null;
+    });
+
+    await recipientsWarmup;
+
+    samEncryptShowStatus('SAM Encrypt: вибери отримувача для dropped file...');
+
+    const recipient = await samEncryptChooseRecipientForManualSend();
+
+    if (!recipient) {
+      samEncryptShowStatus('SAM Encrypt: drag-шифрування скасовано.');
+      return;
+    }
+
+    samEncryptShowStatus(`SAM Encrypt: шифрування dropped file → ${recipient.recipientLabel || recipient.label}`);
+
+    const result = await ipcRenderer.invoke('sam-encrypt:choose-file-and-encrypt', {
+      inputPath,
+      mode: recipient.mode,
+      recipientKeyId: recipient.recipientKeyId || null,
+      groupId: recipient.groupId || null,
+      recipientLabel: recipient.recipientLabel || recipient.label,
+      revealInFolder: true
+    });
+
+    if (result && result.cancelled) {
+      samEncryptShowStatus('SAM Encrypt: drag-шифрування скасовано.');
+      return;
+    }
+
+    if (!result || !result.ok) {
+      samEncryptShowStatus(`SAM Encrypt: помилка drag-шифрування: ${result && result.error ? result.error : 'невідома помилка'}`, true);
+      console.error('SAM Encrypt drag encryption result:', result);
+      return;
+    }
+
+    const target = result.recipient_name || result.recipientLabel || recipient.recipientLabel || recipient.label;
+    const count = result.recipient_count ? `, отримувачів: ${result.recipient_count}` : '';
+
+    samEncryptShowStatus(`SAM Encrypt: dropped file зашифровано для ${target}${count}. Відкрито Finder.`);
+  } catch (error) {
+    samEncryptShowStatus(`SAM Encrypt: помилка drag-шифрування: ${error.message || error}`, true);
+    console.error('SAM Encrypt drag encryption failed:', error);
+  }
 }
 
 function samEncryptStartDropDecisionProbe() {
