@@ -7057,12 +7057,249 @@ function samEncryptGetDroppedFilePath(file) {
 }
 
 
+
+function samEncryptAttachDelay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function samEncryptGetCompactElementText(element) {
+  if (!element) {
+    return '';
+  }
+
+  return String(element.innerText || element.textContent || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function samEncryptFindWhatsAppDocumentAttachTarget() {
+  const elements = Array.from(document.querySelectorAll('button, div[role="button"], [tabindex], label, div'));
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const element of elements) {
+    const text = samEncryptGetCompactElementText(element);
+
+    if (!text) {
+      continue;
+    }
+
+    let score = 0;
+
+    if (text.includes('надіслати документ')) {
+      score += 100;
+    }
+
+    if (text.includes('document')) {
+      score += 90;
+    }
+
+    if (text.includes('документ')) {
+      score += 80;
+    }
+
+    if (text.includes('додати контакт') || text.includes('contact')) {
+      score -= 120;
+    }
+
+    const rect = element.getBoundingClientRect();
+
+    if (rect.width > 20 && rect.height > 20) {
+      score += 5;
+    }
+
+    if (score > bestScore) {
+      best = element;
+      bestScore = score;
+    }
+  }
+
+  return bestScore > 0 ? best : null;
+}
+
+function samEncryptGetFileBaseName(filePath) {
+  return String(filePath || '')
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .pop() || '';
+}
+
+function samEncryptLooksLikeWhatsAppEncryptedPreview(filePath) {
+  const fileName = samEncryptGetFileBaseName(filePath).toLowerCase();
+  const bodyText = samEncryptGetCompactElementText(document.body);
+
+  if (fileName && bodyText.includes(fileName)) {
+    return true;
+  }
+
+  const overlaySignals = [
+    'перетягніть файл сюди',
+    'надіслати документ',
+    'додати контакт'
+  ];
+
+  if (overlaySignals.some((signal) => bodyText.includes(signal))) {
+    return false;
+  }
+
+  const previewSignals = [
+    'додайте підпис',
+    'add a caption',
+    'caption'
+  ];
+
+  return previewSignals.some((signal) => bodyText.includes(signal));
+}
+
+async function samEncryptWaitForEncryptedPreview(filePath, timeoutMs = 5000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (samEncryptLooksLikeWhatsAppEncryptedPreview(filePath)) {
+      return true;
+    }
+
+    await samEncryptAttachDelay(150);
+  }
+
+  return false;
+}
+
+async function samEncryptReadLocalFileForSyntheticDrop(filePath) {
+  const result = await ipcRenderer.invoke('sam-encrypt:read-file-for-synthetic-drop', {
+    filePath
+  });
+
+  if (!result || !result.ok) {
+    throw new Error(result && result.error ? result.error : 'Не вдалося прочитати .samenc для synthetic drop.');
+  }
+
+  const binary = atob(result.base64 || '');
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new File([bytes], result.fileName || samEncryptGetFileBaseName(filePath), {
+    type: result.mimeType || 'application/octet-stream',
+    lastModified: Date.now()
+  });
+}
+
+
+function samEncryptCreateSyntheticDataTransferWithFile(file) {
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  return transfer;
+}
+
+function samEncryptDispatchSyntheticEncryptedDrop(target, file) {
+  if (!target) {
+    return false;
+  }
+
+  const transfer = samEncryptCreateSyntheticDataTransferWithFile(file);
+
+  for (const type of ['dragenter', 'dragover', 'drop']) {
+    const event = new DragEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: transfer
+    });
+
+    target.dispatchEvent(event);
+  }
+
+  return true;
+}
+
+async function samEncryptAttachEncryptedFileViaSyntheticDrop(filePath, originalTarget) {
+  if (!filePath) {
+    throw new Error('Не передано шлях до .samenc для synthetic drop.');
+  }
+
+  const file = await samEncryptReadLocalFileForSyntheticDrop(filePath);
+
+  const targetCandidates = [
+    samEncryptFindWhatsAppDocumentAttachTarget(),
+    originalTarget,
+    document.elementFromPoint(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2)),
+    document.body,
+    document.documentElement
+  ].filter(Boolean);
+
+  for (const target of targetCandidates) {
+    samEncryptDispatchSyntheticEncryptedDrop(target, file);
+
+    if (await samEncryptWaitForEncryptedPreview(filePath, 2500)) {
+      return {
+        ok: true,
+        method: 'synthetic-encrypted-drop'
+      };
+    }
+
+    await samEncryptAttachDelay(250);
+  }
+
+  throw new Error('Synthetic drop .samenc не відкрив WhatsApp preview.');
+}
+
+function samEncryptGetEncryptedOutputPath(result) {
+  if (!result || typeof result !== 'object') {
+    return '';
+  }
+
+  const candidates = [
+    result.outputPath,
+    result.output_path,
+    result.encryptedPath,
+    result.encrypted_path,
+    result.filePath,
+    result.file_path,
+    result.path
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate) {
+      return candidate;
+    }
+  }
+
+  return '';
+}
+
+
+function samEncryptIsAlreadyEncryptedDrop(files) {
+  const list = Array.from(files || []).filter(Boolean);
+
+  if (!list.length) {
+    return false;
+  }
+
+  return list.every((file) => {
+    const name = file && file.name ? String(file.name).toLowerCase() : '';
+    return name.endsWith('.samenc') || name.endsWith('.samenc.zip');
+  });
+}
+
+
 async function samEncryptOnDropDecisionProbe(event) {
   if (!samEncryptDropHasFiles(event)) {
     return;
   }
 
   const droppedFileList = Array.from(event.dataTransfer.files || []);
+
+  if (samEncryptIsAlreadyEncryptedDrop(droppedFileList)) {
+    samEncryptShowStatus('SAM Encrypt: .samenc уже зашифрований, передано WhatsApp для прикріплення.');
+    return;
+  }
+
   const droppedFilesLabel = samEncryptFormatDroppedFiles(event);
 
   const shouldEncrypt = window.confirm(
@@ -7116,7 +7353,7 @@ async function samEncryptOnDropDecisionProbe(event) {
       recipientKeyId: recipient.recipientKeyId || null,
       groupId: recipient.groupId || null,
       recipientLabel: recipient.recipientLabel || recipient.label,
-      revealInFolder: true
+      revealInFolder: false
     });
 
     if (result && result.cancelled) {
@@ -7133,7 +7370,23 @@ async function samEncryptOnDropDecisionProbe(event) {
     const target = result.recipient_name || result.recipientLabel || recipient.recipientLabel || recipient.label;
     const count = result.recipient_count ? `, отримувачів: ${result.recipient_count}` : '';
 
-    samEncryptShowStatus(`SAM Encrypt: dropped file зашифровано для ${target}${count}. Відкрито Finder.`);
+    const encryptedPath = samEncryptGetEncryptedOutputPath(result);
+
+    if (!encryptedPath) {
+      samEncryptShowStatus(`SAM Encrypt: dropped file зашифровано для ${target}${count}. Але шлях до .samenc не повернуто, тому автоприкріплення неможливе.`, true);
+      return;
+    }
+
+    samEncryptShowStatus(`SAM Encrypt: dropped file зашифровано для ${target}${count}. Пробую прикріпити .samenc у чат...`);
+
+    try {
+      const attachResult = await samEncryptAttachEncryptedFileViaSyntheticDrop(encryptedPath, event.target);
+      const method = attachResult && attachResult.method ? `, метод: ${attachResult.method}` : '';
+      samEncryptShowStatus(`SAM Encrypt: .samenc передано WhatsApp${method}. Перевір preview і відправ вручну.`);
+    } catch (attachError) {
+      samEncryptShowStatus(`SAM Encrypt: файл зашифровано, але автоприкріплення не вдалося: ${attachError.message || attachError}.`, true);
+      console.error('SAM Encrypt encrypted attach failed:', attachError);
+    }
   } catch (error) {
     samEncryptShowStatus(`SAM Encrypt: помилка drag-шифрування: ${error.message || error}`, true);
     console.error('SAM Encrypt drag encryption failed:', error);

@@ -2217,7 +2217,65 @@ function runSamEncryptCli(args) {
   });
 }
 
+
 function registerSamEncryptIpcHandlers() {
+  ipcMain.handle('sam-encrypt:read-file-for-synthetic-drop', async (_event, payload) => {
+    try {
+      const filePath = payload && payload.filePath ? String(payload.filePath) : '';
+
+      if (!filePath) {
+        return {
+          ok: false,
+          error: 'Не передано шлях до файлу для synthetic drop.'
+        };
+      }
+
+      const resolvedPath = path.resolve(filePath);
+
+      if (!fs.existsSync(resolvedPath)) {
+        return {
+          ok: false,
+          error: `Файл не знайдено: ${resolvedPath}`
+        };
+      }
+
+      const stat = fs.statSync(resolvedPath);
+
+      if (!stat.isFile()) {
+        return {
+          ok: false,
+          error: `Це не файл: ${resolvedPath}`
+        };
+      }
+
+      const maxBytes = 300 * 1024 * 1024;
+
+      if (stat.size > maxBytes) {
+        return {
+          ok: false,
+          error: `Файл завеликий для synthetic drop: ${stat.size} bytes`
+        };
+      }
+
+      const buffer = fs.readFileSync(resolvedPath);
+
+      return {
+        ok: true,
+        filePath: resolvedPath,
+        fileName: path.basename(resolvedPath),
+        size: stat.size,
+        mimeType: 'application/octet-stream',
+        base64: buffer.toString('base64')
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error.message || String(error)
+      };
+    }
+  });
+
+
   ipcMain.handle('sam-encrypt:status', async () => {
     return runSamEncryptCli(['status']);
   });
