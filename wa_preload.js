@@ -6959,7 +6959,6 @@ async function samEncryptChooseFileManualSend() {
     const count = result.recipient_count ? `, отримувачів: ${result.recipient_count}` : '';
 
     samEncryptShowStatus(`SAM Encrypt: файл зашифровано для ${target}${count}. Відкрито Finder.`);
-    console.log('SAM Encrypt encrypted file:', result);
   } catch (error) {
     samEncryptShowStatus(`SAM Encrypt: помилка шифрування: ${error.message || error}`, true);
     console.error('SAM Encrypt button error:', error);
