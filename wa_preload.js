@@ -6997,9 +6997,65 @@ function samEncryptEnsureButton() {
   document.body.appendChild(button);
 }
 
+function samEncryptDropHasFiles(event) {
+  if (!event || !event.dataTransfer || !event.dataTransfer.files) {
+    return false;
+  }
+
+  return event.dataTransfer.files.length > 0;
+}
+
+function samEncryptFormatDroppedFiles(event) {
+  const files = Array.from(event.dataTransfer.files || []);
+
+  if (!files.length) {
+    return 'Файл не визначено';
+  }
+
+  if (files.length === 1) {
+    const file = files[0];
+    return file && file.name ? file.name : '1 файл';
+  }
+
+  return `${files.length} файлів`;
+}
+
+function samEncryptOnDropDecisionProbe(event) {
+  if (!samEncryptDropHasFiles(event)) {
+    return;
+  }
+
+  const droppedFiles = samEncryptFormatDroppedFiles(event);
+
+  const shouldEncrypt = window.confirm(
+    `SAM Encrypt\n\nШифрувати перед прикріпленням?\n\nФайл: ${droppedFiles}\n\nOK — шифрувати\nСкасувати — прикріпити звичайно`
+  );
+
+  if (!shouldEncrypt) {
+    samEncryptShowStatus('SAM Encrypt: файл передано WhatsApp без шифрування.');
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+
+  samEncryptShowStatus('SAM Encrypt: вибрано шифрування. Наступний крок — шифрування і прикріплення .samenc.');
+}
+
+function samEncryptStartDropDecisionProbe() {
+  if (window.__samEncryptDropDecisionProbeStarted) {
+    return;
+  }
+
+  window.__samEncryptDropDecisionProbeStarted = true;
+  document.addEventListener('drop', samEncryptOnDropDecisionProbe, true);
+}
+
 function samEncryptStartButton() {
   samEncryptEnsureButton();
   samEncryptWarmRecipientCache();
+  samEncryptStartDropDecisionProbe();
 
   window.setInterval(() => {
     samEncryptEnsureButton();
