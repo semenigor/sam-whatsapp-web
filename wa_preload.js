@@ -7057,21 +7057,6 @@ function samEncryptGetDroppedFilePath(file) {
 }
 
 
-function samEncryptDescribeDroppedFilesForPathProbe(files) {
-  return Array.from(files || []).map((file, index) => {
-    const filePath = samEncryptGetDroppedFilePath(file);
-
-    return {
-      index,
-      name: file && file.name ? file.name : '',
-      size: file && Number.isFinite(file.size) ? file.size : 0,
-      type: file && file.type ? file.type : '',
-      path: filePath,
-      hasPath: Boolean(filePath)
-    };
-  });
-}
-
 async function samEncryptOnDropDecisionProbe(event) {
   if (!samEncryptDropHasFiles(event)) {
     return;
