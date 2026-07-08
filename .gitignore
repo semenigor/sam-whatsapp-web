@@ -75,3 +75,13 @@ helpers/sam_encrypt/sam_encrypt_cli_bin.exe
 .venv/
 
 # Local backup / editor files
+
+# Local audit/output folders
+audit_v0.3.1_*/
+audit_v0.3.1_fixed_*/
+release_v0.3/
+release_v0.3.1/
+artifacts_local/
+
+# Local Python helper environments
+helpers/sam_encrypt/.venv/
