@@ -752,32 +752,45 @@ function showHelpWindow() {
   helpWindow.setMenu(null);
   helpWindow.setMenuBarVisibility(false);
 
-  const html = `
-<!doctype html>
+  const html = `<!doctype html>
 <html lang="uk">
 <head>
   <meta charset="utf-8">
   <title>Довідка — SAM WhatsApp Web</title>
   <style>
-    body {
+    html, body {
       margin: 0;
-      padding: 28px;
+      padding: 0;
+      background: #111827;
+      color: #e5e7eb;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f7f5f3;
-      color: #111b21;
+      font-size: 14px;
       line-height: 1.55;
     }
 
+    body {
+      padding: 22px;
+      box-sizing: border-box;
+    }
+
     h1 {
-      margin-top: 0;
-      font-size: 26px;
+      margin: 0 0 16px;
+      color: #f9fafb;
+      font-size: 24px;
     }
 
     h2 {
-      margin-top: 28px;
-      font-size: 20px;
-      border-bottom: 1px solid #d1d7db;
+      margin: 26px 0 10px;
+      color: #f9fafb;
+      font-size: 18px;
+      border-bottom: 1px solid #374151;
       padding-bottom: 6px;
+    }
+
+    h3 {
+      margin: 18px 0 8px;
+      color: #d1d5db;
+      font-size: 15px;
     }
 
     p {
@@ -785,32 +798,406 @@ function showHelpWindow() {
     }
 
     ul, ol {
-      margin-top: 8px;
-      padding-left: 28px;
+      margin: 8px 0 12px 22px;
+      padding: 0;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    .box {
+      border: 1px solid #374151;
+      background: #1f2937;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 12px 0;
+    }
+
+    .ok {
+      border-color: #065f46;
+      background: #064e3b;
+    }
+
+    .warn {
+      border-color: #92400e;
+      background: #451a03;
+    }
+
+    .danger {
+      border-color: #7f1d1d;
+      background: #450a0a;
+    }
+
+    .muted {
+      color: #9ca3af;
     }
 
     code {
-      background: #e9edef;
-      padding: 2px 5px;
-      border-radius: 4px;
+      background: #020617;
+      border: 1px solid #334155;
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #e0f2fe;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
     }
 
-    pre {
-      white-space: pre-wrap;
-      background: #ffffff;
-      border: 1px solid #d1d7db;
-      border-radius: 8px;
-      padding: 16px;
-      font-family: inherit;
+    .toc a {
+      color: #93c5fd;
+      text-decoration: none;
+    }
+
+    .toc a:hover {
+      text-decoration: underline;
+    }
+
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      margin-left: 0;
+    }
+
+    .steps li {
+      counter-increment: step;
+      position: relative;
+      padding-left: 34px;
+      margin: 8px 0;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: #2563eb;
+      color: #fff;
+      text-align: center;
+      line-height: 22px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 14px;
+    }
+
+    th, td {
+      border: 1px solid #374151;
+      padding: 8px;
+      vertical-align: top;
+    }
+
+    th {
+      background: #111827;
+      color: #f9fafb;
+      text-align: left;
     }
   </style>
 </head>
 <body>
-  <h1>SAM WhatsApp Web</h1>
-  <pre>${SAM_HELP_TEXT.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+  <h1>Довідка — SAM WhatsApp Web</h1>
+
+  <div class="box">
+    <p><strong>SAM WhatsApp Web</strong> — це desktop-програма для роботи з WhatsApp Web з додатковими функціями: локальні закріплені чати, SAM Encrypt, автоматичне розшифрування отриманих <code>.samenc</code>, робота з Word/Excel, preview, вставка файлів як текст і зручніше керування вікном.</p>
+    <p class="muted">Програма не замінює WhatsApp. Вона відкриває WhatsApp Web і додає власні локальні інструменти поверх нього.</p>
+  </div>
+
+  <h2>Зміст</h2>
+  <div class="box toc">
+    <ul>
+      <li><a href="#first-start">Перший запуск</a></li>
+      <li><a href="#pinned">Закріплені чати</a></li>
+      <li><a href="#encrypt-main">SAM Encrypt: що це і для чого</a></li>
+      <li><a href="#encrypt-setup">Підготовка ключів, контактів і груп</a></li>
+      <li><a href="#encrypt-button">Шифрування через кнопку SAM Encrypt</a></li>
+      <li><a href="#encrypt-drag">Шифрування перетягуванням файлу в чат</a></li>
+      <li><a href="#decrypt">Отримання і розшифрування .samenc</a></li>
+      <li><a href="#office">Word/Excel і preview</a></li>
+      <li><a href="#copy-text">Копіювання повідомлень і вставка як текст</a></li>
+      <li><a href="#settings">Налаштування</a></li>
+      <li><a href="#troubleshooting">Типові ситуації і що робити</a></li>
+    </ul>
+  </div>
+
+  <h2 id="first-start">1. Перший запуск</h2>
+  <ol class="steps">
+    <li>Запусти SAM WhatsApp Web.</li>
+    <li>Якщо WhatsApp просить авторизацію, відскануй QR-код телефоном через WhatsApp.</li>
+    <li>Після входу відкриється звичайний інтерфейс WhatsApp Web.</li>
+    <li>Зліва або в меню програми будуть доступні додаткові SAM-функції.</li>
+  </ol>
+
+  <div class="warn box">
+    <p><strong>Важливо:</strong> якщо WhatsApp Web не завантажився або просить повторний вхід, це не обовʼязково помилка програми. WhatsApp може сам завершити сесію або вимагати повторної авторизації.</p>
+  </div>
+
+  <h2 id="pinned">2. Закріплені чати</h2>
+  <p>Закріплений чат у SAM WhatsApp Web — це локальна швидка кнопка для відкриття потрібного WhatsApp-чату.</p>
+
+  <div class="box ok">
+    <p><strong>Можна закріпити до 15 чатів.</strong></p>
+  </div>
+
+  <h3>Що важливо розуміти</h3>
+  <ul>
+    <li>Це не те саме, що закріпити чат всередині WhatsApp.</li>
+    <li>Закріплення зберігається локально в SAM WhatsApp Web.</li>
+    <li>Закріплений чат допомагає швидко перейти до потрібної переписки.</li>
+    <li>Якщо чат перейменували або WhatsApp змінив структуру сторінки, може знадобитися відкрити чат вручну і закріпити його повторно.</li>
+  </ul>
+
+  <h3>Як користуватися</h3>
+  <ol class="steps">
+    <li>Відкрий потрібний чат у WhatsApp Web.</li>
+    <li>Використай кнопку або пункт меню для закріплення поточного чату.</li>
+    <li>Після цього чат зʼявиться у списку швидкого доступу.</li>
+    <li>Щоб перейти в чат, натисни його закріплену кнопку.</li>
+  </ol>
+
+  <h2 id="encrypt-main">3. SAM Encrypt: що це і для чого</h2>
+  <p><strong>SAM Encrypt</strong> шифрує файл перед відправкою через WhatsApp або інтернет. Отримувач зможе розшифрувати файл тільки якщо має відповідний приватний ключ.</p>
+
+  <table>
+    <tr>
+      <th>Формат</th>
+      <th>Що це</th>
+    </tr>
+    <tr>
+      <td><code>.sampub</code></td>
+      <td>Публічний ключ користувача. Його можна передавати іншим людям, щоб вони могли шифрувати файли для тебе.</td>
+    </tr>
+    <tr>
+      <td><code>.samkey</code></td>
+      <td>Приватний ключ. Він має залишатися тільки на компʼютері власника. Його не можна передавати іншим.</td>
+    </tr>
+    <tr>
+      <td><code>.samgroup</code></td>
+      <td>Файл групи отримувачів. Дозволяє швидко шифрувати один файл одразу для кількох людей.</td>
+    </tr>
+    <tr>
+      <td><code>.samenc</code></td>
+      <td>Зашифрований файл. Його можна відправляти через WhatsApp, пошту або інший канал.</td>
+    </tr>
+    <tr>
+      <td><code>.samenc.zip</code></td>
+      <td>Архів із зашифрованим файлом. Використовується, коли треба передати зашифрований контейнер у zip-формі.</td>
+    </tr>
+  </table>
+
+  <div class="danger box">
+    <p><strong>Приватний ключ не передавати нікому.</strong> Якщо інша людина отримає твій приватний ключ, вона зможе розшифровувати файли, призначені для тебе.</p>
+  </div>
+
+  <h2 id="encrypt-setup">4. Підготовка ключів, контактів і груп</h2>
+
+  <h3>4.1. Створення власних ключів</h3>
+  <ol class="steps">
+    <li>Відкрий <strong>Налаштування</strong>.</li>
+    <li>У блоці <strong>SAM Encrypt</strong> введи імʼя власника ключів.</li>
+    <li>Натисни <strong>Створити мої ключі</strong>.</li>
+    <li>Програма створить приватний і публічний ключі.</li>
+  </ol>
+
+  <p>Публічний ключ можна експортувати і передати іншим користувачам. Приватний ключ залишається на цьому компʼютері.</p>
+
+  <h3>4.2. Експорт публічного ключа</h3>
+  <ol class="steps">
+    <li>Відкрий <strong>Налаштування</strong>.</li>
+    <li>Натисни <strong>Експортувати публічний ключ</strong>.</li>
+    <li>Отриманий файл <code>.sampub</code> передай тим людям, які мають шифрувати файли для тебе.</li>
+  </ol>
+
+  <h3>4.3. Імпорт публічного ключа іншої людини</h3>
+  <ol class="steps">
+    <li>Отримай від іншого користувача його файл <code>.sampub</code>.</li>
+    <li>Відкрий <strong>Налаштування</strong>.</li>
+    <li>Натисни <strong>Імпортувати публічний ключ</strong>.</li>
+    <li>Вибери файл <code>.sampub</code>.</li>
+    <li>Після імпорту контакт зʼявиться у списку отримувачів SAM Encrypt.</li>
+  </ol>
+
+  <h3>4.4. Створення групи</h3>
+  <ol class="steps">
+    <li>Імпортуй публічні ключі всіх потрібних людей.</li>
+    <li>У <strong>Налаштуваннях</strong> відміть контакти, які мають входити в групу.</li>
+    <li>Введи назву групи.</li>
+    <li>Натисни <strong>Створити групу з вибраних контактів</strong>.</li>
+  </ol>
+
+  <p>Після цього при шифруванні можна буде вибрати не окрему людину, а групу.</p>
+
+  <h3>4.5. Експорт та імпорт групи</h3>
+  <ul>
+    <li><strong>Експорт групи</strong> створює файл <code>.samgroup</code>, який можна передати іншому користувачу.</li>
+    <li><strong>Імпорт групи</strong> додає групу до локального списку груп.</li>
+    <li>Повторний імпорт тієї самої групи не повинен створювати дублікати.</li>
+    <li>Видалення групи не видаляє контакти.</li>
+    <li>Видалення контакту не видаляє групи автоматично, але група може перестати бути повною, якщо в ній був цей контакт.</li>
+  </ul>
+
+  <h2 id="encrypt-button">5. Шифрування через кнопку SAM Encrypt</h2>
+  <p>Цей спосіб підходить, коли файл уже лежить на диску і ти хочеш вибрати його через системне вікно вибору файлу.</p>
+
+  <ol class="steps">
+    <li>Відкрий потрібний чат у WhatsApp Web.</li>
+    <li>Натисни кнопку <strong>SAM Encrypt</strong> або кнопку із замком.</li>
+    <li>Вибери файл, який треба зашифрувати.</li>
+    <li>Вибери отримувача або групу.</li>
+    <li>Програма створить файл <code>.samenc</code>.</li>
+    <li>Якщо файл не прикріпився автоматично, відкрий папку із зашифрованим файлом і прикріпи <code>.samenc</code> вручну як документ.</li>
+  </ol>
+
+  <p>У цьому сценарії програма може відкривати папку з готовим <code>.samenc</code>, щоб користувач міг легко знайти файл.</p>
+
+  <h2 id="encrypt-drag">6. Шифрування перетягуванням файлу в чат</h2>
+  <p>Це основний швидкий спосіб для відправки зашифрованого файлу в конкретний чат.</p>
+
+  <ol class="steps">
+    <li>Відкрий потрібний чат.</li>
+    <li>Перетягни звичайний файл у вікно WhatsApp.</li>
+    <li>Програма запитає: чи потрібно шифрувати файл перед прикріпленням.</li>
+    <li>Якщо натиснути <strong>Cancel / Скасувати</strong>, файл піде у WhatsApp звичайним способом, без шифрування.</li>
+    <li>Якщо натиснути <strong>OK</strong>, відкриється вибір отримувача або групи SAM Encrypt.</li>
+    <li>Після вибору програма зашифрує файл.</li>
+    <li>Папка Finder у цьому режимі не відкривається.</li>
+    <li>Готовий <code>.samenc</code> автоматично потрапить у WhatsApp preview.</li>
+    <li>Перевір, що у preview саме <code>.samenc</code>, і натисни кнопку відправки вручну.</li>
+  </ol>
+
+  <div class="box ok">
+    <p><strong>Програма не натискає Send автоматично.</strong> Це зроблено навмисно: користувач має сам побачити, який файл прикріплений, і тільки після цього відправити його.</p>
+  </div>
+
+  <h3>Нюанси drag-шифрування</h3>
+  <ul>
+    <li>Drag-flow розрахований на один файл за раз.</li>
+    <li>Якщо перетягнути вже готовий <code>.samenc</code> або <code>.samenc.zip</code>, програма не буде шифрувати його повторно.</li>
+    <li>Якщо вибрати групу, файл буде зашифрований для всіх учасників цієї групи.</li>
+    <li>Якщо WhatsApp preview не зʼявився, не відправляй повідомлення. Перевір статус SAM Encrypt або повтори дію.</li>
+    <li>Якщо натиснути <strong>Cancel</strong> на першому питанні, програма не втручається, і WhatsApp прикріплює оригінальний файл.</li>
+  </ul>
+
+  <h2 id="decrypt">7. Отримання і розшифрування .samenc</h2>
+  <p>Коли ти отримуєш файл <code>.samenc</code> у WhatsApp, його треба завантажити.</p>
+
+  <ol class="steps">
+    <li>Натисни download у WhatsApp для отриманого <code>.samenc</code>.</li>
+    <li>Після завершення завантаження SAM WhatsApp Web автоматично спробує розшифрувати файл.</li>
+    <li>Якщо файл зашифрований для тебе, програма розшифрує його і відкриє папку з результатом.</li>
+    <li>Якщо файл не для твого ключа або пошкоджений, розшифрування не вдасться.</li>
+  </ol>
+
+  <h3>Де шукати розшифрований файл</h3>
+  <p>Розшифровані файли зберігаються у службовій папці SAM Encrypt, зазвичай у підпапці <code>decrypted</code>. Її можна відкрити через <strong>Налаштування → Відкрити папку SAM Encrypt</strong>.</p>
+
+  <h3>Чому файл може не розшифруватися</h3>
+  <ul>
+    <li>Файл був зашифрований не для тебе.</li>
+    <li>На цьому компʼютері немає потрібного приватного ключа.</li>
+    <li>Файл пошкодився під час передачі або завантаження.</li>
+    <li>Було видалено або замінено ключі SAM Encrypt.</li>
+  </ul>
+
+  <h2 id="office">8. Word/Excel і preview</h2>
+  <p>Програма має окремі налаштування для роботи з Word/Excel файлами.</p>
+
+  <ul>
+    <li><strong>Куди зберігати Word/Excel перед відкриттям</strong> — службова папка програми або папка Завантаження.</li>
+    <li><strong>Замінювати файл з такою ж назвою</strong> — корисно, якщо не треба створювати копії з однаковими назвами.</li>
+    <li><strong>Показувати preview Word/Excel</strong> — відкриває попередній перегляд перед роботою з файлом.</li>
+    <li><strong>Якщо preview вимкнено — автоматично відкривати Word/Excel у LibreOffice</strong>.</li>
+  </ul>
+
+  <h3>Очищення тимчасових файлів</h3>
+  <p>У Налаштуваннях можна задати, скільки днів зберігати завантажені файли і PDF preview. Також можна вручну очистити тимчасові файли.</p>
+
+  <h2 id="copy-text">9. Копіювання повідомлень і вставка як текст</h2>
+  <p>Програма додає зручні функції для роботи з текстом і файлами в WhatsApp Web.</p>
+
+  <ul>
+    <li>Можна копіювати кілька повідомлень, якщо ця функція доступна в поточному інтерфейсі.</li>
+    <li>Можна вставляти деякі файли як текст, якщо це підтримується для відповідного типу файлу.</li>
+    <li>Якщо файл не може бути перетворений у текст, його треба прикріпити як звичайний документ.</li>
+  </ul>
+
+  <div class="warn box">
+    <p><strong>Порада:</strong> перед відправкою довгого тексту перевір, що WhatsApp вставив його повністю і без пошкодженого форматування.</p>
+  </div>
+
+  <h2 id="settings">10. Налаштування</h2>
+
+  <h3>Масштаб інтерфейсу WhatsApp</h3>
+  <p>Можна вибрати звичайний, компактний, дуже компактний або максимально компактний режим. Це змінює щільність списку чатів, розмір аватарок, тексту і повідомлень.</p>
+
+  <h3>SAM Encrypt</h3>
+  <ul>
+    <li><strong>Оновити статус</strong> — перевіряє, чи готовий SAM Encrypt.</li>
+    <li><strong>Створити мої ключі</strong> — створює ключі для цього компʼютера.</li>
+    <li><strong>Експортувати публічний ключ</strong> — створює <code>.sampub</code> для передачі іншим.</li>
+    <li><strong>Імпортувати публічний ключ</strong> — додає контакт, для якого можна шифрувати файли.</li>
+    <li><strong>Відкрити папку SAM Encrypt</strong> — відкриває службову папку ключів, груп, зашифрованих і розшифрованих файлів.</li>
+    <li><strong>Імпорт групи .samgroup</strong> — додає готову групу отримувачів.</li>
+    <li><strong>Видалити контакт</strong> — прибирає контакт із локального списку.</li>
+    <li><strong>Видалити групу</strong> — прибирає групу, але не видаляє контакти.</li>
+  </ul>
+
+  <h2 id="troubleshooting">11. Типові ситуації і що робити</h2>
+
+  <h3>Не бачу SAM Encrypt отримувача</h3>
+  <ul>
+    <li>Перевір, чи імпортовано його <code>.sampub</code>.</li>
+    <li>Відкрий Налаштування і натисни <strong>Оновити статус</strong>.</li>
+    <li>Якщо контакту немає, імпортуй публічний ключ повторно.</li>
+  </ul>
+
+  <h3>Не бачу групу</h3>
+  <ul>
+    <li>Перевір, чи групу створено або імпортовано.</li>
+    <li>Натисни <strong>Оновити список груп</strong>.</li>
+    <li>Якщо група була передана файлом, імпортуй <code>.samgroup</code>.</li>
+  </ul>
+
+  <h3>Після drag-шифрування не зʼявився WhatsApp preview</h3>
+  <ul>
+    <li>Не натискай Send.</li>
+    <li>Перевір статус SAM Encrypt у нижній частині вікна.</li>
+    <li>Спробуй повторити перетягування файлу.</li>
+    <li>Як запасний варіант скористайся кнопкою SAM Encrypt і прикріпи створений <code>.samenc</code> вручну.</li>
+  </ul>
+
+  <h3>Отримувач не може розшифрувати файл</h3>
+  <ul>
+    <li>Переконайся, що файл був зашифрований саме для цього отримувача або для групи, де він є.</li>
+    <li>Перевір, чи отримувач не перевстановив ключі після передачі тобі свого <code>.sampub</code>.</li>
+    <li>Якщо ключі змінювалися, потрібно отримати новий <code>.sampub</code> і зашифрувати файл повторно.</li>
+  </ul>
+
+  <h3>WhatsApp прикріпив не той файл</h3>
+  <ul>
+    <li>Перед відправкою завжди дивись на preview.</li>
+    <li>Для зашифрованого відправлення назва файлу має закінчуватися на <code>.samenc</code> або <code>.samenc.zip</code>.</li>
+    <li>Якщо бачиш оригінальний <code>.docx</code>, <code>.pdf</code>, <code>.jpg</code> тощо — це не зашифрована відправка.</li>
+  </ul>
+
+  <h3>Що можна безпечно передавати іншим</h3>
+  <ul>
+    <li><code>.sampub</code> — так, це публічний ключ.</li>
+    <li><code>.samgroup</code> — так, якщо треба передати склад групи.</li>
+    <li><code>.samenc</code> — так, це зашифрований файл.</li>
+    <li><code>.samkey</code> — ні, це приватний ключ.</li>
+  </ul>
+
+  <div class="box">
+    <p><strong>Головне правило:</strong> якщо файл треба передати захищено — у WhatsApp preview перед відправкою має бути саме <code>.samenc</code>, а не оригінальний файл.</p>
+  </div>
 </body>
-</html>
-`;
+</html>`;
 
   helpWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
 }
