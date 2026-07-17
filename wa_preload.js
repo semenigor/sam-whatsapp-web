@@ -7572,7 +7572,12 @@ function samEncryptStartDropDecisionProbe() {
 function samEncryptStartButton() {
   samEncryptEnsureButton();
   samEncryptWarmRecipientCache();
-  samEncryptStartDropDecisionProbe();
+  if (samEncryptIsLinuxRuntime()) {
+    console.warn('SAM Encrypt diagnostic: drag/drop interception disabled on Linux.');
+    samEncryptShowStatus('SAM Encrypt diagnostic: drag/drop interception disabled on Linux.');
+  } else {
+    samEncryptStartDropDecisionProbe();
+  }
   samEncryptStartComposerRecoveryProbe();
 
   window.setInterval(() => {
