@@ -7192,6 +7192,14 @@ async function samEncryptReadLocalFileForSyntheticDrop(filePath) {
 }
 
 
+function samEncryptIsLinuxRuntime() {
+  const userAgent = String(navigator.userAgent || '').toLowerCase();
+  const platform = String(navigator.platform || '').toLowerCase();
+
+  return userAgent.includes('linux') || platform.includes('linux');
+}
+
+
 function samEncryptCreateSyntheticDataTransferWithFile(file) {
   const transfer = new DataTransfer();
   transfer.items.add(file);
@@ -7506,7 +7514,7 @@ async function samEncryptOnDropDecisionProbe(event) {
       recipientKeyId: recipient.recipientKeyId || null,
       groupId: recipient.groupId || null,
       recipientLabel: recipient.recipientLabel || recipient.label,
-      revealInFolder: false
+      revealInFolder: samEncryptIsLinuxRuntime()
     });
 
     if (result && result.cancelled) {
@@ -7527,6 +7535,11 @@ async function samEncryptOnDropDecisionProbe(event) {
 
     if (!encryptedPath) {
       samEncryptShowStatus(`SAM Encrypt: dropped file зашифровано для ${target}${count}. Але шлях до .samenc не повернуто, тому автоприкріплення неможливе.`, true);
+      return;
+    }
+
+    if (samEncryptIsLinuxRuntime()) {
+      samEncryptShowStatus(`SAM Encrypt: dropped file зашифровано для ${target}${count}. На Linux автоприкріплення тимчасово вимкнено: прикріпи .samenc вручну з відкритої папки.`);
       return;
     }
 
