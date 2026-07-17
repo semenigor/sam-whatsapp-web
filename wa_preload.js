@@ -7249,6 +7249,159 @@ async function samEncryptAttachEncryptedFileViaSyntheticDrop(filePath, originalT
   throw new Error('Synthetic drop .samenc не відкрив WhatsApp preview.');
 }
 
+
+// Linux/Electron workaround: after WhatsApp attachment preview is closed,
+// the message composer can sometimes lose focus until full app restart.
+// This only restores focus/caret; it does not send anything automatically.
+let samEncryptComposerRecoveryUntil = 0;
+let samEncryptComposerRecoveryStarted = false;
+
+function samEncryptFindCurrentChatComposer() {
+  try {
+    if (typeof samNotesFindCurrentChatInput === 'function') {
+      const composer = samNotesFindCurrentChatInput();
+
+      if (composer) {
+        return composer;
+      }
+    }
+  } catch (_error) {
+    // fall through to local selectors
+  }
+
+  const selectors = [
+    'footer [contenteditable="true"][role="textbox"]',
+    'footer [contenteditable="true"][data-tab]',
+    'footer div[contenteditable="true"]',
+    'div[contenteditable="true"][role="textbox"][data-tab]',
+    'div[contenteditable="true"][role="textbox"]'
+  ];
+
+  for (const selector of selectors) {
+    const candidates = Array.from(document.querySelectorAll(selector));
+
+    for (const candidate of candidates) {
+      try {
+        const rect = candidate.getBoundingClientRect();
+        const style = window.getComputedStyle(candidate);
+
+        if (
+          rect.width > 80 &&
+          rect.height > 18 &&
+          rect.right > 0 &&
+          rect.bottom > 0 &&
+          rect.left < window.innerWidth &&
+          rect.top < window.innerHeight &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden'
+        ) {
+          return candidate;
+        }
+      } catch (_error) {
+        // ignore
+      }
+    }
+  }
+
+  return null;
+}
+
+function samEncryptFocusCurrentChatComposer(reason) {
+  try {
+    const active = document.activeElement;
+
+    if (typeof samIsEditableElement === 'function' && samIsEditableElement(active)) {
+      return true;
+    }
+
+    const composer = samEncryptFindCurrentChatComposer();
+
+    if (!composer) {
+      return false;
+    }
+
+    if (typeof samNotesPlaceCaretAtEnd === 'function') {
+      samNotesPlaceCaretAtEnd(composer);
+    } else {
+      composer.focus({ preventScroll: true });
+    }
+
+    try {
+      samLastEditableForPlainPaste = composer;
+    } catch (_error) {
+      // ignore
+    }
+
+    console.debug('SAM Encrypt composer recovery:', reason || 'unknown');
+    return true;
+  } catch (error) {
+    console.warn('SAM Encrypt composer recovery failed:', error);
+    return false;
+  }
+}
+
+function samEncryptScheduleComposerRecovery(reason, delayMs) {
+  window.setTimeout(() => {
+    if (!samEncryptComposerRecoveryUntil || Date.now() > samEncryptComposerRecoveryUntil) {
+      return;
+    }
+
+    if (document.getElementById('sam-encrypt-recipient-picker-backdrop')) {
+      return;
+    }
+
+    samEncryptFocusCurrentChatComposer(reason);
+  }, delayMs);
+}
+
+function samEncryptArmComposerRecovery(reason) {
+  samEncryptComposerRecoveryUntil = Date.now() + 120000;
+
+  for (const delayMs of [600, 1500, 3000, 7000, 12000, 20000]) {
+    samEncryptScheduleComposerRecovery(reason || 'attach-complete', delayMs);
+  }
+}
+
+function samEncryptStartComposerRecoveryProbe() {
+  if (samEncryptComposerRecoveryStarted) {
+    return;
+  }
+
+  samEncryptComposerRecoveryStarted = true;
+
+  const recoverAfterUserAction = () => {
+    if (!samEncryptComposerRecoveryUntil || Date.now() > samEncryptComposerRecoveryUntil) {
+      return;
+    }
+
+    samEncryptScheduleComposerRecovery('user-action', 250);
+    samEncryptScheduleComposerRecovery('user-action-late', 1200);
+  };
+
+  document.addEventListener('pointerup', recoverAfterUserAction, true);
+  document.addEventListener('click', recoverAfterUserAction, true);
+  document.addEventListener('keyup', recoverAfterUserAction, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (!samEncryptComposerRecoveryUntil || Date.now() > samEncryptComposerRecoveryUntil) {
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+
+    if (typeof samIsEditableElement === 'function' && samIsEditableElement(document.activeElement)) {
+      return;
+    }
+
+    if (event.key && event.key.length === 1) {
+      samEncryptScheduleComposerRecovery('typing-recovery', 0);
+      samEncryptScheduleComposerRecovery('typing-recovery-late', 250);
+    }
+  }, true);
+}
+
 function samEncryptGetEncryptedOutputPath(result) {
   if (!result || typeof result !== 'object') {
     return '';
@@ -7383,6 +7536,7 @@ async function samEncryptOnDropDecisionProbe(event) {
       const attachResult = await samEncryptAttachEncryptedFileViaSyntheticDrop(encryptedPath, event.target);
       const method = attachResult && attachResult.method ? `, метод: ${attachResult.method}` : '';
       samEncryptShowStatus(`SAM Encrypt: .samenc передано WhatsApp${method}. Перевір preview і відправ вручну.`);
+      samEncryptArmComposerRecovery('encrypted-file-attached');
     } catch (attachError) {
       samEncryptShowStatus(`SAM Encrypt: файл зашифровано, але автоприкріплення не вдалося: ${attachError.message || attachError}.`, true);
       console.error('SAM Encrypt encrypted attach failed:', attachError);
@@ -7406,6 +7560,7 @@ function samEncryptStartButton() {
   samEncryptEnsureButton();
   samEncryptWarmRecipientCache();
   samEncryptStartDropDecisionProbe();
+  samEncryptStartComposerRecoveryProbe();
 
   window.setInterval(() => {
     samEncryptEnsureButton();
