@@ -120,6 +120,11 @@
       "recommends": [
         "libappindicator3-1"
       ]
+    },
+    "mac": {
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist"
     }
   },
   "devDependencies": {
