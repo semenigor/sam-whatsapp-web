@@ -1776,7 +1776,7 @@ function writeMicrosoftOfficePdfConverterScript(scriptPath) {
     '',
     'throw "Unsupported Microsoft Office converter kind: $Kind"',
     ''
-  ].join('\\n');
+  ].join('\n');
 
   fs.writeFileSync(scriptPath, script, 'utf8');
 }
