@@ -1612,7 +1612,7 @@ async function openOfficeDocument(filePath) {
 }
 
 
-function runProcessAndWait(command, args, timeoutMs = 90000) {
+function runProcessAndWait(command, args, timeoutMs = 90000, label = 'процес') {
   return new Promise((resolve, reject) => {
     let finished = false;
     let stderrText = '';
@@ -1639,7 +1639,7 @@ function runProcessAndWait(command, args, timeoutMs = 90000) {
         // Процес уже міг завершитися.
       }
 
-      reject(new Error('Перевищено час очікування конвертації документа'));
+      reject(new Error(`Перевищено час очікування конвертації документа: ${label}`));
     }, timeoutMs);
 
     child.stderr.on('data', (chunk) => {
@@ -1671,7 +1671,7 @@ function runProcessAndWait(command, args, timeoutMs = 90000) {
         return;
       }
 
-      reject(new Error(`LibreOffice завершився з кодом ${code}\n${stderrText}`));
+      reject(new Error(`${label} завершився з кодом ${code}\n${stderrText}`));
     });
   });
 }
@@ -1692,65 +1692,215 @@ function findPdfInDirectory(directory) {
   return null;
 }
 
-async function convertOfficeDocumentToPdf(filePath) {
-  const officeBinary = findExecutable(['libreoffice', 'soffice']);
 
-  if (!officeBinary) {
-    throw new Error('LibreOffice не знайдено');
+function getMicrosoftOfficeConverterKind(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+
+  const wordExtensions = new Set(['.doc', '.docx', '.docm', '.rtf', '.odt']);
+  const excelExtensions = new Set(['.xls', '.xlsx', '.xlsm', '.xlsb', '.ods', '.csv']);
+
+  if (wordExtensions.has(ext)) {
+    return 'word';
   }
 
+  if (excelExtensions.has(ext)) {
+    return 'excel';
+  }
+
+  return null;
+}
+
+function getWindowsPowerShellBinary() {
+  return findExecutable(['powershell.exe', 'powershell']) || 'powershell.exe';
+}
+
+function writeMicrosoftOfficePdfConverterScript(scriptPath) {
+  const script = [
+    'param(',
+    '  [Parameter(Mandatory=$true)][string]$InputPath,',
+    '  [Parameter(Mandatory=$true)][string]$OutputPath,',
+    '  [Parameter(Mandatory=$true)][string]$Kind',
+    ')',
+    '',
+    '$ErrorActionPreference = "Stop"',
+    '$inputFull = [System.IO.Path]::GetFullPath($InputPath)',
+    '$outputFull = [System.IO.Path]::GetFullPath($OutputPath)',
+    '',
+    'if ($Kind -eq "word") {',
+    '  $word = $null',
+    '  $doc = $null',
+    '  try {',
+    '    $word = New-Object -ComObject Word.Application',
+    '    $word.Visible = $false',
+    '    $word.DisplayAlerts = 0',
+    '    $doc = $word.Documents.Open($inputFull, $false, $true)',
+    '    $doc.ExportAsFixedFormat($outputFull, 17)',
+    '  } finally {',
+    '    if ($doc -ne $null) {',
+    '      $doc.Close($false) | Out-Null',
+    '      [System.Runtime.InteropServices.Marshal]::ReleaseComObject($doc) | Out-Null',
+    '    }',
+    '    if ($word -ne $null) {',
+    '      $word.Quit() | Out-Null',
+    '      [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null',
+    '    }',
+    '    [GC]::Collect()',
+    '    [GC]::WaitForPendingFinalizers()',
+    '  }',
+    '  exit 0',
+    '}',
+    '',
+    'if ($Kind -eq "excel") {',
+    '  $excel = $null',
+    '  $workbook = $null',
+    '  try {',
+    '    $excel = New-Object -ComObject Excel.Application',
+    '    $excel.Visible = $false',
+    '    $excel.DisplayAlerts = $false',
+    '    $workbook = $excel.Workbooks.Open($inputFull, 3, $true)',
+    '    $workbook.ExportAsFixedFormat(0, $outputFull)',
+    '  } finally {',
+    '    if ($workbook -ne $null) {',
+    '      $workbook.Close($false) | Out-Null',
+    '      [System.Runtime.InteropServices.Marshal]::ReleaseComObject($workbook) | Out-Null',
+    '    }',
+    '    if ($excel -ne $null) {',
+    '      $excel.Quit() | Out-Null',
+    '      [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null',
+    '    }',
+    '    [GC]::Collect()',
+    '    [GC]::WaitForPendingFinalizers()',
+    '  }',
+    '  exit 0',
+    '}',
+    '',
+    'throw "Unsupported Microsoft Office converter kind: $Kind"',
+    ''
+  ].join('\\n');
+
+  fs.writeFileSync(scriptPath, script, 'utf8');
+}
+
+async function convertOfficeDocumentToPdfWithMicrosoftOffice(filePath, cachedPdf) {
+  if (process.platform !== 'win32') {
+    throw new Error('Microsoft Office preview fallback доступний тільки у Windows');
+  }
+
+  const kind = getMicrosoftOfficeConverterKind(filePath);
+
+  if (!kind) {
+    throw new Error(`Microsoft Office preview не підтримує цей тип файла: ${path.extname(filePath)}`);
+  }
+
+  const workDir = fs.mkdtempSync(path.join(getPreviewCacheDir(), 'ms-office-convert-'));
+  const scriptPath = path.join(workDir, 'convert-office-to-pdf.ps1');
+  const powershellBinary = getWindowsPowerShellBinary();
+
+  try {
+    writeMicrosoftOfficePdfConverterScript(scriptPath);
+
+    await runProcessAndWait(
+      powershellBinary,
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptPath,
+        '-InputPath',
+        filePath,
+        '-OutputPath',
+        cachedPdf,
+        '-Kind',
+        kind
+      ],
+      120000,
+      'Microsoft Office'
+    );
+
+    if (!fs.existsSync(cachedPdf)) {
+      throw new Error('Microsoft Office не створив PDF-файл для попереднього перегляду');
+    }
+
+    return cachedPdf;
+  } finally {
+    try {
+      clearDirectoryFiles(workDir);
+      fs.rmdirSync(workDir);
+    } catch {
+      // Не критично.
+    }
+  }
+}
+
+async function convertOfficeDocumentToPdf(filePath) {
   const cachedPdf = getPreviewPdfPathForFile(filePath);
 
   if (fs.existsSync(cachedPdf)) {
     return cachedPdf;
   }
 
-  const workDir = fs.mkdtempSync(path.join(getPreviewCacheDir(), 'convert-'));
+  const officeBinary = findExecutable(['libreoffice', 'soffice']);
 
-  const args = [
-    '--headless',
-    '--nologo',
-    '--nolockcheck',
-    '--nodefault',
-    '--nofirststartwizard',
-    '--convert-to',
-    'pdf',
-    '--outdir',
-    workDir,
-    filePath
-  ];
+  if (officeBinary) {
+    const workDir = fs.mkdtempSync(path.join(getPreviewCacheDir(), 'convert-'));
 
-  try {
-    await runProcessAndWait(officeBinary, args);
-
-    const expectedPdf = path.join(workDir, `${path.parse(filePath).name}.pdf`);
-    const foundPdf = fs.existsSync(expectedPdf) ? expectedPdf : findPdfInDirectory(workDir);
-
-    if (!foundPdf) {
-      throw new Error('LibreOffice не створив PDF-файл для попереднього перегляду');
-    }
-
-    fs.copyFileSync(foundPdf, cachedPdf);
+    const args = [
+      '--headless',
+      '--nologo',
+      '--nolockcheck',
+      '--nodefault',
+      '--nofirststartwizard',
+      '--convert-to',
+      'pdf',
+      '--outdir',
+      workDir,
+      filePath
+    ];
 
     try {
-      clearDirectoryFiles(workDir);
-      fs.rmdirSync(workDir);
-    } catch {
-      // Не критично.
-    }
+      await runProcessAndWait(officeBinary, args, 90000, 'LibreOffice');
 
-    return cachedPdf;
-  } catch (error) {
-    try {
-      clearDirectoryFiles(workDir);
-      fs.rmdirSync(workDir);
-    } catch {
-      // Не критично.
-    }
+      const expectedPdf = path.join(workDir, `${path.parse(filePath).name}.pdf`);
+      const foundPdf = fs.existsSync(expectedPdf) ? expectedPdf : findPdfInDirectory(workDir);
 
-    throw error;
+      if (!foundPdf) {
+        throw new Error('LibreOffice не створив PDF-файл для попереднього перегляду');
+      }
+
+      fs.copyFileSync(foundPdf, cachedPdf);
+
+      try {
+        clearDirectoryFiles(workDir);
+        fs.rmdirSync(workDir);
+      } catch {
+        // Не критично.
+      }
+
+      return cachedPdf;
+    } catch (error) {
+      try {
+        clearDirectoryFiles(workDir);
+        fs.rmdirSync(workDir);
+      } catch {
+        // Не критично.
+      }
+
+      if (process.platform !== 'win32') {
+        throw error;
+      }
+
+      console.warn('LibreOffice preview failed, trying Microsoft Office fallback:', error);
+    }
   }
+
+  if (process.platform === 'win32') {
+    return convertOfficeDocumentToPdfWithMicrosoftOffice(filePath, cachedPdf);
+  }
+
+  throw new Error('LibreOffice не знайдено');
 }
+
 
 function createPreviewWindow(originalPath, pdfPath) {
   const previewWindow = new BrowserWindow({
