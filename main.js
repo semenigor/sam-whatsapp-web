@@ -2106,6 +2106,11 @@ function configureSession() {
           const settings = loadSettings();
 
           if (settings.previewOfficeDownloads) {
+            if (process.platform === 'win32') {
+              await openOfficeDocument(savePath);
+              return;
+            }
+
             await showOfficePreview(savePath);
             return;
           }
