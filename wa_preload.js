@@ -1775,6 +1775,48 @@ function samPinsEnsureStyle() {
       box-shadow: 0 1px 2px rgba(0,0,0,0.18);
     }
 
+    .sam-local-pins-trigger,
+    .sam-local-pins-trigger.sam-local-pins-embedded,
+    .sam-local-pins-trigger.sam-local-pins-floating {
+      background: transparent !important;
+      background-image: none !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }
+
+    .sam-local-pins-trigger::before,
+    .sam-local-pins-trigger:hover::before,
+    .sam-local-pins-trigger.sam-local-pins-open::before {
+      display: none !important;
+      content: none !important;
+      background: transparent !important;
+      background-image: none !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }
+
+    .sam-local-pins-trigger-icon {
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      width: 34px !important;
+      height: 34px !important;
+      font-size: 0 !important;
+      line-height: 1 !important;
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.45));
+    }
+
+    .sam-local-pins-trigger-svg {
+      display: block !important;
+      width: 30px !important;
+      height: 30px !important;
+    }
+
+    .sam-local-pins-trigger-badge {
+      display: none !important;
+    }
+
     .sam-local-pins-drawer {
       position: fixed;
       width: 310px;
@@ -1933,7 +1975,16 @@ function samPinsEnsurePanel() {
     trigger.className = 'sam-local-pins-trigger';
     trigger.title = 'SAM закріплені чати';
     trigger.innerHTML = `
-      <span class="sam-local-pins-trigger-icon">📌</span>
+      <span class="sam-local-pins-trigger-icon" aria-hidden="true">
+        <svg class="sam-local-pins-trigger-svg" viewBox="0 0 24 24" focusable="false">
+          <g transform="rotate(-35 12 12)">
+            <path d="M8.4 3.2h7.2l-.9 6.2 3.1 3.1-2.1 2.1-3.1-3.1-6.2.9V5.2c0-1.1.9-2 2-2z" fill="#e1192d"/>
+            <path d="M12.2 13.8l-5.6 5.6c-.3.3-.8.3-1.1 0s-.3-.8 0-1.1l5.6-5.6 1.1 1.1z" fill="#5f6368"/>
+            <path d="M8.6 4.7h5.3l-.5 3.6H8.6V4.7z" fill="#ff4b5c" opacity="0.92"/>
+            <path d="M15.2 10.1l1.7 1.7-1.2 1.2-1.7-1.7 1.2-1.2z" fill="#a50f1d"/>
+          </g>
+        </svg>
+      </span>
     `;
 
     document.body.appendChild(trigger);
