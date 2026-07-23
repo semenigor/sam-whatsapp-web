@@ -7193,10 +7193,15 @@ async function samEncryptReadLocalFileForSyntheticDrop(filePath) {
 
 
 function samEncryptIsLinuxRuntime() {
-  const userAgent = String(navigator.userAgent || '').toLowerCase();
-  const platform = String(navigator.platform || '').toLowerCase();
-
-  return userAgent.includes('linux') || platform.includes('linux');
+  try {
+    return (
+      typeof process !== 'undefined' &&
+      process &&
+      process.platform === 'linux'
+    );
+  } catch (_error) {
+    return false;
+  }
 }
 
 
