@@ -2103,14 +2103,14 @@ function configureSession() {
         if (isOfficeDocument(savePath)) {
           cleanupCachesBySettings();
 
+          if (process.platform === 'win32') {
+            await showOfficeDownloadedFileActions(savePath);
+            return;
+          }
+
           const settings = loadSettings();
 
           if (settings.previewOfficeDownloads) {
-            if (process.platform === 'win32') {
-              await openOfficeDocument(savePath);
-              return;
-            }
-
             await showOfficePreview(savePath);
             return;
           }
@@ -2130,6 +2130,67 @@ function configureSession() {
   });
 }
 
+
+
+async function saveDownloadedFileAs(sourcePath) {
+  const result = await dialog.showSaveDialog({
+    title: 'Зберегти файл',
+    defaultPath: path.join(app.getPath('downloads'), path.basename(sourcePath)),
+    buttonLabel: 'Зберегти'
+  });
+
+  if (result.canceled || !result.filePath) {
+    return false;
+  }
+
+  const targetPath = result.filePath;
+
+  if (path.resolve(sourcePath) !== path.resolve(targetPath)) {
+    fs.copyFileSync(sourcePath, targetPath);
+  }
+
+  const messageResult = await dialog.showMessageBox({
+    type: 'info',
+    title: getAppWindowTitle(),
+    message: 'Файл збережено',
+    detail: targetPath,
+    buttons: ['Показати в папці', 'OK'],
+    defaultId: 1,
+    cancelId: 1
+  });
+
+  if (messageResult.response === 0) {
+    shell.showItemInFolder(targetPath);
+  }
+
+  return true;
+}
+
+async function showOfficeDownloadedFileActions(filePath) {
+  const result = await dialog.showMessageBox({
+    type: 'question',
+    title: getAppWindowTitle(),
+    message: 'Файл Word/Excel завантажено',
+    detail: path.basename(filePath),
+    buttons: ['Відкрити', 'Зберегти як...', 'Показати в папці', 'Закрити'],
+    defaultId: 0,
+    cancelId: 3
+  });
+
+  if (result.response === 0) {
+    await openOfficeDocument(filePath);
+    return;
+  }
+
+  if (result.response === 1) {
+    await saveDownloadedFileAs(filePath);
+    return;
+  }
+
+  if (result.response === 2) {
+    shell.showItemInFolder(filePath);
+  }
+}
 
 function isSamEncryptDownloadFile(filePath) {
   return path.extname(String(filePath || '')).toLowerCase() === '.samenc';
