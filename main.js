@@ -199,6 +199,8 @@ const DEFAULT_SETTINGS = {
   autoOpenOfficeDownloads: false,
   attachmentCacheDays: 7,
   previewCacheDays: 7,
+  autoLaunchOnLogin: true,
+  lastAttachmentSaveDir: '',
   uiScaleMode: 'ultra'
 };
 
@@ -230,6 +232,11 @@ function normalizeSettings(raw) {
 
   settings.attachmentCacheDays = Number(settings.attachmentCacheDays);
   settings.previewCacheDays = Number(settings.previewCacheDays);
+  settings.autoLaunchOnLogin = settings.autoLaunchOnLogin !== false;
+
+  if (typeof settings.lastAttachmentSaveDir !== 'string') {
+    settings.lastAttachmentSaveDir = '';
+  }
 
   if (!Number.isFinite(settings.attachmentCacheDays) || settings.attachmentCacheDays < 1) {
     settings.attachmentCacheDays = DEFAULT_SETTINGS.attachmentCacheDays;
@@ -2135,7 +2142,7 @@ function configureSession() {
 async function saveDownloadedFileAs(sourcePath) {
   const result = await dialog.showSaveDialog({
     title: 'Зберегти файл',
-    defaultPath: path.join(app.getPath('downloads'), path.basename(sourcePath)),
+    defaultPath: path.join(getLastAttachmentSaveDir(), path.basename(sourcePath)),
     buttonLabel: 'Зберегти'
   });
 
@@ -2144,6 +2151,7 @@ async function saveDownloadedFileAs(sourcePath) {
   }
 
   const targetPath = result.filePath;
+  rememberLastAttachmentSaveDir(targetPath);
 
   if (path.resolve(sourcePath) !== path.resolve(targetPath)) {
     fs.copyFileSync(sourcePath, targetPath);
@@ -2189,6 +2197,104 @@ async function showOfficeDownloadedFileActions(filePath) {
 
   if (result.response === 2) {
     shell.showItemInFolder(filePath);
+  }
+}
+
+
+function quoteDesktopExecPath(value) {
+  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function getLinuxAutostartDesktopPath() {
+  return path.join(app.getPath('home'), '.config', 'autostart', 'sam-whatsapp-web.desktop');
+}
+
+function setLinuxAutoLaunchEnabled(enabled) {
+  const desktopPath = getLinuxAutostartDesktopPath();
+
+  if (!enabled) {
+    try {
+      if (fs.existsSync(desktopPath)) {
+        fs.unlinkSync(desktopPath);
+      }
+    } catch (error) {
+      console.warn('Failed to remove Linux autostart file:', error);
+    }
+
+    return;
+  }
+
+  const desktopDir = path.dirname(desktopPath);
+  fs.mkdirSync(desktopDir, { recursive: true });
+
+  const content = [
+    '[Desktop Entry]',
+    'Type=Application',
+    'Name=SAM WhatsApp Web',
+    `Exec=${quoteDesktopExecPath(process.execPath)}`,
+    'Terminal=false',
+    'X-GNOME-Autostart-enabled=true',
+    ''
+  ].join('\n');
+
+  fs.writeFileSync(desktopPath, content, 'utf8');
+}
+
+function setAutoLaunchEnabled(enabled) {
+  if (!app.isPackaged) {
+    return;
+  }
+
+  if (process.platform === 'linux') {
+    setLinuxAutoLaunchEnabled(enabled);
+    return;
+  }
+
+  if (process.platform === 'win32') {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      path: process.execPath
+    });
+    return;
+  }
+
+  if (process.platform === 'darwin') {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      openAsHidden: false
+    });
+  }
+}
+
+function ensureAutoLaunchBySettings() {
+  try {
+    const settings = loadSettings();
+    setAutoLaunchEnabled(Boolean(settings.autoLaunchOnLogin));
+  } catch (error) {
+    console.warn('Failed to configure autostart:', error);
+  }
+}
+
+function getLastAttachmentSaveDir() {
+  const settings = loadSettings();
+
+  if (
+    settings.lastAttachmentSaveDir &&
+    fs.existsSync(settings.lastAttachmentSaveDir)
+  ) {
+    return settings.lastAttachmentSaveDir;
+  }
+
+  return app.getPath('downloads');
+}
+
+function rememberLastAttachmentSaveDir(filePath) {
+  try {
+    const settings = loadSettings();
+    settings.lastAttachmentSaveDir = path.dirname(filePath);
+    saveSettings(settings);
+  } catch (error) {
+    console.warn('Failed to remember last attachment save directory:', error);
   }
 }
 
@@ -2699,6 +2805,7 @@ function setupAutoUpdater() {
 
 
 app.whenReady().then(() => {
+  ensureAutoLaunchBySettings();
     app.setName(APP_NAME);
 
     loadSettings();
