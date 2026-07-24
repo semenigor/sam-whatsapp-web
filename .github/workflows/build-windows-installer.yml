@@ -1,0 +1,159 @@
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Use Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Check Python
+        run: |
+          py -3 --version
+
+      - name: Install npm dependencies
+        run: |
+          if (Test-Path package-lock.json) {
+            npm ci
+          } else {
+            npm install
+          }
+
+      - name: Build Windows SAM Encrypt CLI
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $venv = Join-Path $env:RUNNER_TEMP "sam-encrypt-cli-venv"
+
+          py -3 -m venv $venv
+
+          $python = Join-Path $venv "Scripts\python.exe"
+
+          & $python -m pip install --upgrade pip wheel
+          & $python -m pip install -r helpers/sam_encrypt/requirements.txt pyinstaller
+
+          Remove-Item "helpers/sam_encrypt/sam_encrypt_cli_bin" -Force -ErrorAction SilentlyContinue
+          Remove-Item "helpers/sam_encrypt/sam_encrypt_cli_bin.exe" -Force -ErrorAction SilentlyContinue
+
+          & $python -m PyInstaller `
+            --clean `
+            --onefile `
+            --name sam_encrypt_cli_bin `
+            --hidden-import _cffi_backend `
+            --collect-all cffi `
+            --collect-all nacl `
+            --distpath helpers/sam_encrypt `
+            --workpath "$env:RUNNER_TEMP\sam-encrypt-cli-build" `
+            --specpath "$env:RUNNER_TEMP\sam-encrypt-cli-spec" `
+            helpers/sam_encrypt/sam_encrypt_cli.py
+
+          if (!(Test-Path "helpers/sam_encrypt/sam_encrypt_cli_bin.exe")) {
+            throw "Windows SAM Encrypt CLI was not created"
+          }
+
+          Copy-Item "helpers/sam_encrypt/sam_encrypt_cli_bin.exe" "helpers/sam_encrypt/sam_encrypt_cli_bin" -Force
+
+          $bytes = [System.IO.File]::ReadAllBytes("helpers/sam_encrypt/sam_encrypt_cli_bin.exe")
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
+            throw "sam_encrypt_cli_bin.exe is not a Windows PE executable"
+          }
+
+          $env:SAM_ENCRYPT_HOME = Join-Path $env:RUNNER_TEMP "sam-encrypt-home"
+
+          $status = & ".\helpers\sam_encrypt\sam_encrypt_cli_bin.exe" status
+          $status
+          $status | ConvertFrom-Json | Out-Null
+
+          $groups = & ".\helpers\sam_encrypt\sam_encrypt_cli_bin.exe" list-groups
+          $groups
+          $groups | ConvertFrom-Json | Out-Null
+
+      - name: Control checks
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $files = @(
+            "main.js",
+            "wa_preload.js",
+            "settings_preload.js",
+            "preview_preload.js"
+          )
+
+          foreach ($file in $files) {
+            node --check $file
+          }
+
+          $pattern = "input\[type=file\]|filechooser|file-chooser|arm-next-file-chooser|get-next-file-chooser-state|webContents\.debugger|CDP|click\(\).*send|send-button|data-icon=.send|aria-label=.Send"
+
+          $matches = Select-String -Path $files -Pattern $pattern -AllMatches -ErrorAction SilentlyContinue
+
+          if ($matches) {
+            $matches | Format-Table -AutoSize
+            throw "Forbidden attachment automation pattern found"
+          }
+
+      - name: Build and publish Windows installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx electron-builder --win nsis --x64 --publish always
+
+      - name: Validate Windows installer update artifacts
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $setup = Get-ChildItem -Path dist -File -Filter "*Setup.exe" |
+            Where-Object { $_.Length -gt 1000000 } |
+            Select-Object -First 1
+
+          if (-not $setup) {
+            throw "Windows Setup.exe not found"
+          }
+
+          $setup.FullName
+          $setup.Length
+
+          $latest = Join-Path "dist" "latest.yml"
+          if (!(Test-Path $latest)) {
+            throw "latest.yml not found"
+          }
+
+          Get-Content $latest
+
+          $blockmap = Get-ChildItem -Path dist -File -Filter "*.blockmap" |
+            Select-Object -First 1
+
+          if (-not $blockmap) {
+            throw "Setup blockmap not found"
+          }
+
+          $blockmap.FullName
+          $blockmap.Length
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: sam-whatsapp-web-windows-installer
+          path: |
+            dist/*Setup.exe
+            dist/*.blockmap
+            dist/latest.yml
+          if-no-files-found: error
