@@ -1,0 +1,137 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+            artifact_name: sam-whatsapp-web-macos-arm64
+          - arch: x64
+            runner: macos-15-intel
+            artifact_name: sam-whatsapp-web-macos-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Use Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Check system architecture
+        run: |
+          uname -a
+          uname -m
+          node -p "process.platform + ' ' + process.arch"
+
+      - name: Install npm dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Build macOS SAM Encrypt CLI
+        run: |
+          set -euo pipefail
+
+          python3 --version
+
+          VENV="$RUNNER_TEMP/sam-encrypt-cli-venv"
+          python3 -m venv "$VENV"
+
+          "$VENV/bin/python" -m pip install --upgrade pip wheel
+          "$VENV/bin/python" -m pip install -r helpers/sam_encrypt/requirements.txt pyinstaller
+
+          rm -f helpers/sam_encrypt/sam_encrypt_cli_bin
+
+          "$VENV/bin/python" -m PyInstaller \
+            --clean \
+            --onefile \
+            --name sam_encrypt_cli_bin \
+            --hidden-import _cffi_backend \
+            --collect-all cffi \
+            --collect-all nacl \
+            --distpath helpers/sam_encrypt \
+            --workpath "$RUNNER_TEMP/sam-encrypt-cli-build" \
+            --specpath "$RUNNER_TEMP/sam-encrypt-cli-spec" \
+            helpers/sam_encrypt/sam_encrypt_cli.py
+
+          test -f helpers/sam_encrypt/sam_encrypt_cli_bin
+
+          file helpers/sam_encrypt/sam_encrypt_cli_bin
+          ./helpers/sam_encrypt/sam_encrypt_cli_bin status
+
+      - name: Control checks
+        run: |
+          set -euo pipefail
+
+          node --check main.js
+          node --check wa_preload.js
+          node --check settings_preload.js
+          node --check preview_preload.js
+
+          if grep -RInE "input\[type=file\]|filechooser|file-chooser|arm-next-file-chooser|get-next-file-chooser-state|webContents\.debugger|CDP|click\(\).*send|send-button|data-icon=.send|aria-label=.Send" \
+            main.js wa_preload.js settings_preload.js preview_preload.js; then
+            echo "Forbidden attachment automation pattern found"
+            exit 1
+          fi
+
+      - name: Build macOS app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          set -euo pipefail
+
+          rm -rf dist
+
+          npx electron-builder --mac dmg zip --${{ matrix.arch }} --publish never
+
+      - name: Validate macOS artifacts
+        run: |
+          set -euo pipefail
+
+          find dist -maxdepth 3 -type f -print -exec ls -lh {} \;
+
+          if ! find dist -type f \( -name "*.dmg" -o -name "*.zip" \) | grep -q .; then
+            echo "No macOS dmg/zip artifacts found"
+            exit 1
+          fi
+
+          APP_PATH="$(find dist -maxdepth 4 -name "SAM WhatsApp Web.app" -print -quit || true)"
+
+          if [ -n "$APP_PATH" ]; then
+            echo "APP_PATH=$APP_PATH"
+            file "$APP_PATH/Contents/MacOS/SAM WhatsApp Web"
+            /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Contents/Info.plist"
+            /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist"
+            /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PATH/Contents/Info.plist"
+
+            HELPER_PATH="$APP_PATH/Contents/Resources/helpers/sam_encrypt/sam_encrypt_cli_bin"
+            test -f "$HELPER_PATH"
+            file "$HELPER_PATH"
+          fi
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
