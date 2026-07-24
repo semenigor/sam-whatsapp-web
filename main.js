@@ -2711,13 +2711,21 @@ function registerNotesIpcHandlers() {
 }
 
 function setupAutoUpdater() {
-  // Поки GitHub Release містить тільки Linux AppImage.
-  // На macOS electron-updater шукає latest-mac.yml і показує 404.
-  if (process.platform !== 'linux') {
+  if (process.platform !== 'win32' && process.platform !== 'linux') {
     electronLog.info(`Auto-update disabled on platform: ${process.platform}`);
     return;
   }
 
+  if (
+    process.platform === 'win32' &&
+    (
+      process.env.PORTABLE_EXECUTABLE_DIR ||
+      process.env.PORTABLE_EXECUTABLE_FILE
+    )
+  ) {
+    electronLog.info('Auto-update disabled for Windows portable build.');
+    return;
+  }
 
   if (!app.isPackaged) {
     return;
