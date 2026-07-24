@@ -2795,12 +2795,23 @@ function setupAutoUpdater() {
   autoUpdater.on('error', (err) => {
     console.error('[auto-update] error', err);
 
+    const detail = err && err.message ? err.message : String(err || '');
+
+    if (
+      detail.includes('Cannot find latest.yml') ||
+      detail.includes('Cannot find latest-linux.yml') ||
+      detail.includes('HttpError: 404')
+    ) {
+      electronLog.warn('[auto-update] update metadata not found, popup suppressed:', detail);
+      return;
+    }
+
     dialog.showMessageBox(mainWindow, {
       type: 'warning',
       buttons: ['OK'],
       title: 'Помилка оновлення',
       message: 'Не вдалося перевірити або завантажити оновлення.',
-      detail: err && err.message ? err.message : String(err || '')
+      detail
     }).catch(() => {});
   });
 
