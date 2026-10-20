@@ -7631,6 +7631,9 @@ function samEncryptStartButton() {
   if (samEncryptIsLinuxRuntime()) {
     console.warn('SAM Encrypt: drag/drop interception disabled on Linux.');
     samEncryptShowStatus('SAM Encrypt: drag/drop interception disabled on Linux.');
+  } else if (typeof process !== 'undefined' && process.platform === 'win32') {
+    console.warn('SAM Encrypt: drag/drop interception disabled on Windows (diagnostic).');
+    samEncryptShowStatus('SAM Encrypt: drag/drop interception disabled on Windows (diagnostic).');
   } else {
     samEncryptStartDropDecisionProbe();
   }
