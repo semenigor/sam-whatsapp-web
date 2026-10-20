@@ -7505,6 +7505,353 @@ function samEncryptIsAlreadyEncryptedDrop(files) {
 }
 
 
+// Stage 1: UI only. No drop listener uses this dialog until separately approved.
+const SAM_ENCRYPT_DND_CHOICE_EXPERIMENT_ENABLED = true;
+
+function samEncryptShowNonblockingDropChoice(fileCount) {
+  if (!SAM_ENCRYPT_DND_CHOICE_EXPERIMENT_ENABLED || !document.body) {
+    return Promise.resolve('cancel');
+  }
+
+  if (document.getElementById('sam-encrypt-dnd-choice-backdrop')) {
+    return Promise.resolve('cancel');
+  }
+
+  const count = Number.isSafeInteger(fileCount) && fileCount > 0 ? fileCount : 1;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sam-encrypt-dnd-choice-backdrop';
+    backdrop.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.55);box-sizing:border-box';
+
+    const panel = document.createElement('div');
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-labelledby', 'sam-encrypt-dnd-choice-title');
+    panel.setAttribute('aria-describedby', 'sam-encrypt-dnd-choice-description');
+    panel.style.cssText = 'width:min(500px,100%);max-height:80vh;overflow:auto;padding:20px;border-radius:14px;background:#111b21;color:#e9edef;border:1px solid #4b5c63;box-shadow:0 16px 48px rgba(0,0,0,.45);font-family:system-ui,sans-serif';
+
+    const title = document.createElement('div');
+    title.id = 'sam-encrypt-dnd-choice-title';
+    title.textContent = 'SAM Encrypt — прикріплення документа';
+    title.style.cssText = 'font-size:18px;font-weight:700;margin-bottom:12px';
+
+    const description = document.createElement('div');
+    description.id = 'sam-encrypt-dnd-choice-description';
+    description.textContent = `Перетягнуто файлів: ${count}. Вибери спосіб прикріплення. Надсилання залишиться ручним.`;
+    description.style.cssText = 'font-size:14px;line-height:1.5;margin-bottom:20px';
+
+    const buttons = document.createElement('div');
+    buttons.style.cssText = 'display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px';
+
+    const close = (choice) => {
+      if (settled) return;
+      settled = true;
+      backdrop.remove();
+      resolve(choice);
+    };
+
+    const makeButton = (label, choice, primary = false) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.style.cssText = `cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid #60717a;color:#e9edef;background:${primary ? '#176c62' : '#263740'};font:600 13px system-ui,sans-serif`;
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        close(choice);
+      });
+      buttons.appendChild(button);
+      return button;
+    };
+
+    const cancelButton = makeButton('Скасувати', 'cancel');
+    makeButton('Без шифрування', 'plain');
+    makeButton('Шифрувати', 'encrypt', true);
+
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) close('cancel');
+    });
+    backdrop.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        close('cancel');
+      }
+    }, true);
+
+    panel.appendChild(title);
+    panel.appendChild(description);
+    panel.appendChild(buttons);
+    backdrop.appendChild(panel);
+    document.body.appendChild(backdrop);
+    cancelButton.focus({ preventScroll: true });
+  });
+}
+
+// Stage 2: dormant prototype. Do not enable before isolated and native macOS tests.
+// Never sends a message. The old Windows/Linux/legacy Mac paths are preserved.
+let samDndExperimentBusy = false;
+let samDndExperimentSynthetic = false;
+
+// Stage 8A: fail closed when WhatsApp changes the chat header during a drop.
+// Header mutations may also include harmless status updates. In that case the
+// user must attach manually; we prefer a false refusal to a wrong-chat attach.
+function samDndExperimentChatState() {
+  const main = document.querySelector('#main');
+  const header = main && main.querySelector('header');
+  const titled = header && header.querySelector('[title]');
+  return {
+    main,
+    header,
+    titled,
+    title: titled ? String(titled.getAttribute('title') || '') : ''
+  };
+}
+
+function samDndExperimentWatchChat(chat) {
+  if (!chat || !chat.main || !chat.header || !chat.titled ||
+      !chat.title || !chat.header.isConnected) {
+    return false;
+  }
+  try {
+    const watcher = new MutationObserver(() => {
+      chat.invalidated = true;
+    });
+    watcher.observe(chat.header, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true
+    });
+    chat.watcher = watcher;
+    return true;
+  } catch (error) {
+    console.warn('SAM Encrypt: chat continuity watcher unavailable:', error);
+    return false;
+  }
+}
+
+function samDndExperimentStopWatchChat(chat) {
+  if (chat && chat.watcher) {
+    chat.watcher.disconnect();
+    chat.watcher = null;
+  }
+}
+
+function samDndExperimentSameChat(before) {
+  if (!before) return false;
+  // MutationObserver callbacks are asynchronous; consume queued changes now.
+  if (before.watcher && before.watcher.takeRecords().length) {
+    before.invalidated = true;
+  }
+  if (before.invalidated) return false;
+  const after = samDndExperimentChatState();
+  return Boolean(before.main && before.header && before.header.isConnected &&
+    before.titled && before.titled.isConnected && before.title &&
+    before.main === after.main && before.header === after.header &&
+    before.titled === after.titled && before.title === after.title);
+}
+
+function samDndExperimentDispatchOnce(files, target, chat) {
+  if (!samDndExperimentSameChat(chat)) {
+    throw new Error('Чат змінився або його не вдалося надійно визначити. Прикріпи файл вручну.');
+  }
+  if (!target || !target.isConnected || typeof target.dispatchEvent !== 'function') {
+    throw new Error('Область вкладення вже недоступна. Прикріпи файл вручну.');
+  }
+  if (!files.length) {
+    throw new Error('Немає файла для прикріплення.');
+  }
+
+  const transfer = new DataTransfer();
+  for (const file of files) {
+    transfer.items.add(file);
+  }
+
+  samDndExperimentSynthetic = true;
+  try {
+    // Single target, single attempt: never cycle across DOM candidates.
+    for (const type of ['dragenter', 'dragover', 'drop']) {
+      target.dispatchEvent(new DragEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: transfer
+      }));
+    }
+  } finally {
+    samDndExperimentSynthetic = false;
+  }
+  // dispatchEvent returning does NOT prove WhatsApp opened its preview.
+  samEncryptShowStatus('SAM Encrypt: виконано одну спробу прикріплення. Перевір preview WhatsApp; якщо його немає — прикріпи файл вручну.');
+}
+
+// Limit only the experimental encryption route; plain native-sized files and
+// the separate manual SAM Encrypt button retain their existing behavior.
+const SAM_DND_EXPERIMENT_MAX_ENCRYPT_BYTES = 20 * 1024 * 1024;
+
+async function samDndExperimentEncryptOne(file, originalTarget, chat) {
+  if (!file || !Number.isSafeInteger(file.size) || file.size < 0 ||
+      file.size > SAM_DND_EXPERIMENT_MAX_ENCRYPT_BYTES) {
+    throw new Error('Файл завеликий або його розмір невідомий для автоматичного прикріплення. Використай кнопку SAM Encrypt і прикріпи результат вручну.');
+  }
+  const inputPath = samEncryptGetDroppedFilePath(file);
+  if (!inputPath) {
+    throw new Error('Не вдалося визначити шлях файла. Для шифрування використай кнопку SAM Encrypt.');
+  }
+
+  await samEncryptRefreshRecipientCache(false);
+  const recipient = await samEncryptChooseRecipientForManualSend();
+  if (!recipient) {
+    samDndExperimentReleaseDragOverlayAfterCancel();
+    samEncryptShowStatus('SAM Encrypt: вибір отримувача скасовано; оригінал не прикріплено.');
+    return;
+  }
+  if (!samDndExperimentSameChat(chat)) {
+    throw new Error('Чат змінився під час вибору отримувача. Оригінал не прикріплено.');
+  }
+
+  const result = await ipcRenderer.invoke('sam-encrypt:choose-file-and-encrypt', {
+    inputPath,
+    mode: recipient.mode,
+    recipientKeyId: recipient.recipientKeyId || null,
+    groupId: recipient.groupId || null,
+    recipientLabel: recipient.recipientLabel || recipient.label,
+    revealInFolder: false
+  });
+  if (result && result.cancelled) {
+    samDndExperimentReleaseDragOverlayAfterCancel();
+    samEncryptShowStatus('SAM Encrypt: шифрування скасовано; оригінал не прикріплено.');
+    return;
+  }
+  if (!result || !result.ok) {
+    throw new Error(result && result.error ? result.error : 'Помилка шифрування. Оригінал не прикріплено.');
+  }
+  const outputPath = samEncryptGetEncryptedOutputPath(result);
+  if (!outputPath) {
+    throw new Error('Шифрування завершене, але шлях .samenc не отримано. Прикріпи зашифрований файл вручну.');
+  }
+  if (!samDndExperimentSameChat(chat)) {
+    samDndExperimentReleaseDragOverlayAfterCancel();
+    samEncryptShowStatus('SAM Encrypt: файл зашифровано, але чат змінився. Прикріпи .samenc вручну.', true);
+    return;
+  }
+  const encrypted = await samEncryptReadLocalFileForSyntheticDrop(outputPath);
+  samDndExperimentDispatchOnce([encrypted], originalTarget, chat);
+}
+
+// Stage 3: finish only a user-cancelled experimental drop on macOS.
+// Native WhatsApp DnD has already shown its overlay before SAM captured drop.
+// This synthetic dragleave was confirmed manually on macOS; its reliability
+// across repeated operations has NOT yet been established.
+function samDndExperimentReleaseDragOverlayAfterCancel() {
+  try {
+    const main = document.querySelector('#main');
+    if (!main) return false;
+    const rect = main.getBoundingClientRect();
+    if (!(rect.width > 0 && rect.height > 0)) return false;
+
+    const x = Math.floor(rect.left + rect.width / 2);
+    const y = Math.floor(rect.top + rect.height / 2);
+    const target = document.elementFromPoint(x, y) || document.body;
+    if (!target) return false;
+
+    // Deliberately no File or DataTransfer, and never simulate Send.
+    target.dispatchEvent(new DragEvent('dragleave', {
+      bubbles: true,
+      cancelable: true,
+      relatedTarget: null
+    }));
+    return true;
+  } catch (error) {
+    console.warn('SAM Encrypt: cancelled drop cleanup failed:', error);
+    return false;
+  }
+}
+
+async function samDndExperimentOnDrop(event) {
+  if (!SAM_ENCRYPT_DND_CHOICE_EXPERIMENT_ENABLED || samDndExperimentSynthetic) {
+    return;
+  }
+  if (!samEncryptDropHasFiles(event)) {
+    return;
+  }
+  const files = Array.from(event.dataTransfer.files || []);
+  if (samEncryptIsAlreadyEncryptedDrop(files)) {
+    // Already encrypted: native WhatsApp path, no experimental interception.
+    return;
+  }
+  if (samDndExperimentBusy) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    samEncryptShowStatus('SAM Encrypt: заверши попередній вибір файла.', true);
+    return;
+  }
+  const chat = samDndExperimentChatState();
+  const rect = chat.main && chat.main.getBoundingClientRect();
+  const insideChatBounds = Boolean(
+    rect && rect.width > 0 && rect.height > 0 &&
+    Number.isFinite(event.clientX) && Number.isFinite(event.clientY) &&
+    event.clientX >= rect.left && event.clientX < rect.right &&
+    event.clientY >= rect.top && event.clientY < rect.bottom
+  );
+  if (!insideChatBounds || !chat.title) {
+    // Native WhatsApp drop outside an identifiable open chat remains untouched.
+    return;
+  }
+  if (!samDndExperimentWatchChat(chat)) {
+    // Do not intercept if chat continuity cannot be observed.
+    return;
+  }
+
+  const originalTarget = event.target;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  samDndExperimentBusy = true;
+
+  try {
+    // Yield until after the native drop handler returns before showing our UI.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    const choice = await samEncryptShowNonblockingDropChoice(files.length);
+    if (choice === 'cancel') {
+      samDndExperimentReleaseDragOverlayAfterCancel();
+      samEncryptShowStatus('SAM Encrypt: прикріплення скасовано.');
+      return;
+    }
+    if (files.length > 10) {
+      throw new Error('Понад 10 файлів. Прикріпи їх вручну.');
+    }
+    if (choice === 'plain') {
+      samDndExperimentDispatchOnce(files, originalTarget, chat);
+      return;
+    }
+    if (choice === 'encrypt') {
+      if (files.length !== 1) {
+        throw new Error('Шифрування перетягуванням підтримує один файл. Оригінали не прикріплено.');
+      }
+      await samDndExperimentEncryptOne(files[0], originalTarget, chat);
+      return;
+    }
+    throw new Error('Невідомий вибір прикріплення. Файл не прикріплено.');
+  } catch (error) {
+    // Any failed experimental handoff must not leave WhatsApp's drag overlay open.
+    samDndExperimentReleaseDragOverlayAfterCancel();
+    samEncryptShowStatus(`SAM Encrypt: ${error.message || error}`, true);
+    console.warn('SAM Encrypt experimental drop failed; no automatic resend.');
+  } finally {
+    samDndExperimentStopWatchChat(chat);
+    samDndExperimentBusy = false;
+  }
+}
+
+function samDndExperimentStartDrop() {
+  if (window.__samDndExperimentStarted) return;
+  window.__samDndExperimentStarted = true;
+  document.addEventListener('drop', samDndExperimentOnDrop, true);
+}
+
 async function samEncryptOnDropDecisionProbe(event) {
   if (!samEncryptDropHasFiles(event)) {
     return;
@@ -7628,7 +7975,11 @@ function samEncryptStartDropDecisionProbe() {
 function samEncryptStartButton() {
   samEncryptEnsureButton();
   samEncryptWarmRecipientCache();
-  if (samEncryptIsLinuxRuntime()) {
+  if (SAM_ENCRYPT_DND_CHOICE_EXPERIMENT_ENABLED &&
+      typeof process !== 'undefined' &&
+      (process.platform === 'darwin' || process.platform === 'win32')) {
+    samDndExperimentStartDrop();
+  } else if (samEncryptIsLinuxRuntime()) {
     console.warn('SAM Encrypt: drag/drop interception disabled on Linux.');
     samEncryptShowStatus('SAM Encrypt: drag/drop interception disabled on Linux.');
   } else if (typeof process !== 'undefined' && process.platform === 'win32') {
