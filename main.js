@@ -2533,7 +2533,12 @@ function createMainWindow() {
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
-      mainWindow.hide();
+      if (process.platform === 'win32') {
+        // Keep the window on the taskbar so unread overlays remain visible.
+        mainWindow.minimize();
+      } else {
+        mainWindow.hide();
+      }
     }
   });
 
