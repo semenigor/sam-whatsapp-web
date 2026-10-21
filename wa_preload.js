@@ -6858,10 +6858,77 @@ async function samEncryptChooseRecipientForManualSend() {
     hint.style.color = '#aebac1';
     hint.style.marginBottom = '14px';
 
+    // SAM_060_CONTACTS_ONLY_DROPDOWN_V1
+    // 'self' and 'group' stay as visible buttons; only 'contact' is collapsed.
     const list = document.createElement('div');
     list.style.display = 'flex';
     list.style.flexDirection = 'column';
     list.style.gap = '8px';
+
+    const contactCount = options.filter((option) => option.mode === 'contact').length;
+    const contactDropdown = contactCount ? document.createElement('details') : null;
+    let contactList = null;
+    let dropdownInserted = false;
+
+    if (contactDropdown) {
+      contactDropdown.style.border = '1px solid rgba(255,255,255,0.18)';
+      contactDropdown.style.borderRadius = '10px';
+      contactDropdown.style.background = '#202c33';
+
+      const summary = document.createElement('summary');
+      summary.textContent = `Контакти (${contactCount}) — розгорнути список`;
+      summary.style.padding = '11px 12px';
+      summary.style.cursor = 'pointer';
+      summary.style.fontSize = '14px';
+      summary.style.fontWeight = '600';
+      summary.style.userSelect = 'none';
+
+      const contactSearch = document.createElement('input');
+      contactSearch.type = 'search';
+      contactSearch.placeholder = 'Пошук контакту…';
+      contactSearch.setAttribute('aria-label', 'Пошук контакту');
+      contactSearch.style.display = 'block';
+      contactSearch.style.boxSizing = 'border-box';
+      contactSearch.style.width = 'calc(100% - 24px)';
+      contactSearch.style.margin = '0 12px 10px';
+      contactSearch.style.padding = '10px 12px';
+      contactSearch.style.background = '#111b21';
+      contactSearch.style.border = '1px solid rgba(255,255,255,0.25)';
+      contactSearch.style.borderRadius = '8px';
+      contactSearch.style.color = '#e9edef';
+      contactSearch.style.fontSize = '14px';
+
+      contactList = document.createElement('div');
+      contactList.style.display = 'flex';
+      contactList.style.flexDirection = 'column';
+      contactList.style.gap = '8px';
+      contactList.style.maxHeight = '220px';
+      contactList.style.overflowY = 'auto';
+      contactList.style.padding = '0 12px 12px';
+
+      const noMatches = document.createElement('div');
+      noMatches.textContent = 'Контактів не знайдено';
+      noMatches.style.display = 'none';
+      noMatches.style.color = '#aebac1';
+      noMatches.style.fontSize = '13px';
+      noMatches.style.padding = '0 12px 12px';
+
+      contactSearch.addEventListener('input', () => {
+        const text = contactSearch.value.trim().toLocaleLowerCase();
+        let visible = 0;
+        for (const button of contactList.children) {
+          const found = button.textContent.toLocaleLowerCase().includes(text);
+          button.style.display = found ? '' : 'none';
+          if (found) visible += 1;
+        }
+        noMatches.style.display = visible ? 'none' : 'block';
+      });
+
+      contactDropdown.appendChild(summary);
+      contactDropdown.appendChild(contactSearch);
+      contactDropdown.appendChild(contactList);
+      contactDropdown.appendChild(noMatches);
+    }
 
     options.forEach((option, index) => {
       const item = document.createElement('button');
@@ -6892,7 +6959,17 @@ async function samEncryptChooseRecipientForManualSend() {
         close(option);
       });
 
-      list.appendChild(item);
+      if (option.mode === 'contact' && contactDropdown) {
+        // Preserve the original order: self, then collapsed contacts, then groups.
+        if (!dropdownInserted) {
+          list.appendChild(contactDropdown);
+          dropdownInserted = true;
+        }
+        contactList.appendChild(item);
+      } else {
+        // 'Для себе' and groups remain individual visible buttons with original callbacks.
+        list.appendChild(item);
+      }
     });
 
     const footer = document.createElement('div');
