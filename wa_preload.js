@@ -6131,12 +6131,14 @@ function samEnsureUltraCompactViewStyle() {
     */
 
     #side img {
+      ${process.platform === 'win32' ? '' : `
       width: var(--sam-list-avatar-size) !important;
       height: var(--sam-list-avatar-size) !important;
       min-width: var(--sam-list-avatar-size) !important;
       min-height: var(--sam-list-avatar-size) !important;
       max-width: var(--sam-list-avatar-size) !important;
       max-height: var(--sam-list-avatar-size) !important;
+      `}
       object-fit: cover !important;
       border-radius: 50% !important;
       transform: none !important;
