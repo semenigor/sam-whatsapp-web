@@ -145,3 +145,80 @@ jobs:
           name: sam-whatsapp-web-windows-portable
           path: dist/*.exe
           if-no-files-found: error
+
+      - name: Package Windows Fast Portable ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $source = Join-Path $PWD 'dist\win-unpacked'
+          if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+            throw 'Unpacked Windows app not found: dist\win-unpacked'
+          }
+
+          $required = @(
+            'SAM WhatsApp Web.exe',
+            'resources\app.asar',
+            'resources\helpers\sam_encrypt\sam_encrypt_cli_bin.exe'
+          )
+
+          foreach ($relative in $required) {
+            $fullPath = Join-Path $source $relative
+            if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+              throw "Missing file in unpacked Windows app: $relative"
+            }
+          }
+
+          $version = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version
+          if ($version -ne '0.6.0') {
+            throw "Unexpected application version: $version"
+          }
+
+          $zipPath = Join-Path $PWD "dist\SAM-WhatsApp-Web-$version-x64-FastPortable.zip"
+          if (Test-Path -LiteralPath $zipPath) {
+            throw "Fast Portable ZIP already exists: $zipPath"
+          }
+
+          # Zip directory CONTENTS, not the win-unpacked parent folder.
+          [System.IO.Compression.ZipFile]::CreateFromDirectory(
+            $source,
+            $zipPath,
+            [System.IO.Compression.CompressionLevel]::Optimal,
+            $false
+          )
+
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+            $entries = [System.Collections.Generic.HashSet[string]]::new(
+              [System.StringComparer]::OrdinalIgnoreCase
+            )
+            foreach ($entry in $archive.Entries) {
+              [void]$entries.Add($entry.FullName.Replace('\', '/'))
+            }
+
+            foreach ($relative in $required) {
+              $entryName = $relative.Replace('\', '/')
+              if (-not $entries.Contains($entryName)) {
+                throw "Missing file inside Fast Portable ZIP: $entryName"
+              }
+            }
+          }
+          finally {
+            $archive.Dispose()
+          }
+
+          $size = (Get-Item -LiteralPath $zipPath).Length
+          if ($size -lt 1000000) {
+            throw "Fast Portable ZIP is unexpectedly small: $size bytes"
+          }
+
+          Write-Output "WIN_FAST_PORTABLE_ZIP=PASS"
+          Write-Output "WIN_FAST_PORTABLE_ZIP_SIZE=$size"
+          Write-Output "WIN_FAST_PORTABLE_ZIP_SHA256=$((Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash)"
+
+      - name: Upload Windows Fast Portable artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: sam-whatsapp-web-windows-fast-portable
+          path: dist/*-FastPortable.zip
+          if-no-files-found: error
