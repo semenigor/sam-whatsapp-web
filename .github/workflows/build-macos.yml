@@ -92,7 +92,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build macOS app
+      - name: Build unsigned macOS app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
@@ -100,7 +100,56 @@ jobs:
 
           rm -rf dist
 
-          npx electron-builder --mac dmg zip --${{ matrix.arch }} --publish never
+          npx electron-builder --mac dir --${{ matrix.arch }} --publish never
+
+          APP_PATH="$(find dist -maxdepth 3 -type d -name 'SAM WhatsApp Web.app' -print -quit)"
+          test -n "$APP_PATH"
+          test -d "$APP_PATH"
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+
+      - name: Sign macOS app (ad-hoc with media entitlements)
+        run: |
+          set -euo pipefail
+
+          test -f build/entitlements.mac.plist
+          test -f build/entitlements.mac.inherit.plist
+          node scripts/macos-sign-adhoc.js "$APP_PATH"
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+          DETAILS="$(codesign -dv --verbose=4 "$APP_PATH" 2>&1)"
+          printf '%s\n' "$DETAILS" | grep -F 'Identifier=com.semenigor.samwhatsappweb'
+          printf '%s\n' "$DETAILS" | grep -F 'Signature=adhoc'
+          printf '%s\n' "$DETAILS" | grep -E 'flags=.*runtime'
+
+          codesign -d --entitlements :- "$APP_PATH" \
+            > "$RUNNER_TEMP/sam-mac-entitlements.plist" 2>/dev/null
+
+          python3 - <<'PY_CHECK_MEDIA'
+          import os
+          import plistlib
+          from pathlib import Path
+
+          p = Path(os.environ['RUNNER_TEMP']) / 'sam-mac-entitlements.plist'
+          d = plistlib.loads(p.read_bytes())
+          for item in ('audio-input', 'camera'):
+              key = 'com.apple.security.device.' + item
+              if d.get(key) is not True:
+                  raise RuntimeError('Missing signed entitlement: ' + key)
+              print('SIGNED_ENTITLEMENT=PASS: ' + key)
+          PY_CHECK_MEDIA
+
+          echo "MAC_CI_SIGN=PASS"
+
+      - name: Package signed macOS app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          set -euo pipefail
+
+          npx electron-builder --prepackaged "$APP_PATH" --mac dmg zip --${{ matrix.arch }} --publish never
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          echo "MAC_CI_PACKAGE=PASS"
 
       - name: Validate macOS artifacts
         run: |
