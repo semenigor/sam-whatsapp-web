@@ -174,6 +174,12 @@ jobs:
             throw "Unexpected application version: $version"
           }
 
+          # The normal Portable EXE and its unpacked source must stay marker-free.
+          $sourceMarker = Join-Path $source 'resources\sam-fast-portable.mode'
+          if (Test-Path -LiteralPath $sourceMarker) {
+            throw 'Unexpected Fast Portable marker in normal EXE build source'
+          }
+
           $zipPath = Join-Path $PWD "dist\SAM-WhatsApp-Web-$version-x64-FastPortable.zip"
           if (Test-Path -LiteralPath $zipPath) {
             throw "Fast Portable ZIP already exists: $zipPath"
@@ -186,6 +192,57 @@ jobs:
             [System.IO.Compression.CompressionLevel]::Optimal,
             $false
           )
+
+          # Add marker and instructions to the Fast ZIP ONLY (not dist/win-unpacked).
+          $zipUpdate = [System.IO.Compression.ZipFile]::Open(
+            $zipPath, [System.IO.Compression.ZipArchiveMode]::Update
+          )
+          try {
+            $markerName = 'resources/sam-fast-portable.mode'
+            if ($zipUpdate.GetEntry($markerName)) {
+              throw 'Fast Portable marker already exists in ZIP'
+            }
+            $markerEntry = $zipUpdate.CreateEntry($markerName)
+            $markerStream = $markerEntry.Open()
+            try {
+              $markerBytes = [System.Text.Encoding]::ASCII.GetBytes('SAM_WHATSAPP_WEB_FAST_PORTABLE_060')
+              $markerStream.Write($markerBytes, 0, $markerBytes.Length)
+            }
+            finally {
+              $markerStream.Dispose()
+            }
+
+            $readme = @(
+              'SAM WhatsApp Web 0.6.0 - Fast Portable (Windows x64)'
+              ''
+              '1. Розпакуйте весь ZIP до постійної папки, наприклад C:\SAM-WhatsApp-Web.'
+              '2. Запускайте SAM WhatsApp Web.exe з цієї папки. Не переміщуйте EXE окремо.'
+              '3. Всі файли та папки resources потрібно залишити поруч із EXE.'
+              '4. Автоматичне оновлення вимкнене. Нову версію отримуйте повним ZIP.'
+              '5. Програма не змінює автозапуск Windows. Якщо він потрібний:'
+              '   Win+R -> shell:startup -> створіть ярлик на цей SAM WhatsApp Web.exe.'
+              '6. Якщо була інша версія, перевірте її запис автозапуску в Windows.'
+              '7. Для повного виходу скористайтеся меню програми або системним треєм.'
+              '8. Налаштування і сеанс WhatsApp зберігаються у %APPDATA%\sam-whatsapp-web.'
+              '9. Перед оновленням закрийте програму; не змішуйте файли різних версій.'
+              ''
+              'Fast Portable не потребує встановлення; інсталятор або права адміністратора не потрібні.'
+              ''
+            ) -join "`r`n"
+            $readmeEntry = $zipUpdate.CreateEntry('README-FAST-PORTABLE-UK.txt')
+            $readmeStream = $readmeEntry.Open()
+            try {
+              # UTF-8 BOM helps classic Windows Notepad detect Ukrainian text.
+              $readmeBytes = [System.Text.Encoding]::UTF8.GetBytes(([string][char]0xFEFF) + $readme)
+              $readmeStream.Write($readmeBytes, 0, $readmeBytes.Length)
+            }
+            finally {
+              $readmeStream.Dispose()
+            }
+          }
+          finally {
+            $zipUpdate.Dispose()
+          }
 
           $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
           try {
@@ -202,6 +259,26 @@ jobs:
                 throw "Missing file inside Fast Portable ZIP: $entryName"
               }
             }
+
+            $markerCheck = $archive.GetEntry('resources/sam-fast-portable.mode')
+            if ($null -eq $markerCheck) {
+              throw 'Fast Portable marker missing inside ZIP'
+            }
+            $reader = [System.IO.StreamReader]::new($markerCheck.Open(), [System.Text.Encoding]::ASCII)
+            try {
+              $actualMarker = $reader.ReadToEnd()
+            }
+            finally {
+              $reader.Dispose()
+            }
+            if ($actualMarker -ne 'SAM_WHATSAPP_WEB_FAST_PORTABLE_060') {
+              throw 'Fast Portable marker content mismatch'
+            }
+            if ($null -eq $archive.GetEntry('README-FAST-PORTABLE-UK.txt')) {
+              throw 'Fast Portable user instructions missing inside ZIP'
+            }
+            Write-Output 'WIN_FAST_PORTABLE_MODE_MARKER=PASS'
+            Write-Output 'WIN_FAST_PORTABLE_README=PASS'
           }
           finally {
             $archive.Dispose()

@@ -33,6 +33,23 @@ const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const electronLog = require('electron-log');
 
+// Fast Portable is distinguished by a marker present ONLY in the unpacked ZIP.
+// Never infer this mode from an environment variable or the EXE filename.
+function isWindowsFastPortable() {
+  if (process.platform !== 'win32' || !app.isPackaged) {
+    return false;
+  }
+
+  try {
+    const marker = path.join(process.resourcesPath, 'sam-fast-portable.mode');
+    return fs.readFileSync(marker, 'utf8').trim() === 'SAM_WHATSAPP_WEB_FAST_PORTABLE_060';
+  } catch {
+    return false;
+  }
+}
+
+const SAM_WINDOWS_FAST_PORTABLE = isWindowsFastPortable();
+
 // Opt-in timings for the Windows app process (not the Portable EXE unpacker).
 // Set SAM_STARTUP_TRACE=1 before launch to write [SAM_STARTUP] to electron-log.
 const SAM_STARTUP_TRACE = process.platform === 'win32' && process.env.SAM_STARTUP_TRACE === '1';
@@ -2283,6 +2300,13 @@ function setAutoLaunchEnabled(enabled) {
 }
 
 function ensureAutoLaunchBySettings() {
+  // Do not silently replace an installed/legacy build's Windows login item.
+  // Fast Portable users can opt in with a shortcut in shell:startup.
+  if (SAM_WINDOWS_FAST_PORTABLE) {
+    electronLog.info('Windows Fast Portable: automatic startup registration disabled.');
+    return;
+  }
+
   try {
     const settings = loadSettings();
     setAutoLaunchEnabled(Boolean(settings.autoLaunchOnLogin));
@@ -2741,6 +2765,12 @@ function registerNotesIpcHandlers() {
 }
 
 function setupAutoUpdater() {
+  // Unpacked Fast Portable has no installer. Never run NSIS-style auto updates.
+  if (SAM_WINDOWS_FAST_PORTABLE) {
+    electronLog.info('Auto-update disabled for Windows Fast Portable build.');
+    return;
+  }
+
   if (process.platform !== 'win32' && process.platform !== 'linux') {
     electronLog.info(`Auto-update disabled on platform: ${process.platform}`);
     return;
