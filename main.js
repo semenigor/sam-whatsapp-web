@@ -33,6 +33,22 @@ const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const electronLog = require('electron-log');
 
+// Opt-in timings for the Windows app process (not the Portable EXE unpacker).
+// Set SAM_STARTUP_TRACE=1 before launch to write [SAM_STARTUP] to electron-log.
+const SAM_STARTUP_TRACE = process.platform === 'win32' && process.env.SAM_STARTUP_TRACE === '1';
+const SAM_STARTUP_CLOCK = SAM_STARTUP_TRACE ? process.hrtime.bigint() : null;
+
+function samStartupTrace(stage, details = '') {
+  if (!SAM_STARTUP_TRACE) {
+    return;
+  }
+
+  const elapsedMs = (Number(process.hrtime.bigint() - SAM_STARTUP_CLOCK) / 1e6).toFixed(1);
+  electronLog.info(`[SAM_STARTUP] pid=${process.pid} stage=${stage} elapsed_ms=${elapsedMs}${details ? ` ${details}` : ''}`);
+}
+
+samStartupTrace('app_js_entry');
+
 const APP_NAME = 'SAM WhatsApp Web';
 
 let samUnreadBadgeCount = 0;
@@ -2454,6 +2470,7 @@ function registerWhatsAppContextMenu(win) {
 }
 
 function createMainWindow() {
+  samStartupTrace('window_creation_begin');
   mainWindow = new BrowserWindow({
   transparent: false,
   alwaysOnTop: false,
@@ -2508,10 +2525,17 @@ function createMainWindow() {
   mainWindow.webContents.setUserAgent(CHROME_USER_AGENT);
 
   mainWindow.once('ready-to-show', () => {
+    samStartupTrace('window_ready_to_show');
     if (mainWindow) {
       mainWindow.show();
+      samStartupTrace('window_show_called');
       mainWindow.focus();
     }
+  });
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    // Document-load completion is not necessarily the moment chats become usable.
+    samStartupTrace('whatsapp_document_loaded');
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -2546,6 +2570,7 @@ function createMainWindow() {
     mainWindow = null;
   });
 
+  samStartupTrace('whatsapp_load_requested');
   mainWindow.loadURL(WHATSAPP_URL, { userAgent: CHROME_USER_AGENT }).catch((error) => {
     dialog.showErrorBox('Помилка запуску WhatsApp Web', String(error));
   });
@@ -2828,13 +2853,39 @@ function setupAutoUpdater() {
 }
 
 
+// On Windows, keep the initial page load free of recursive synchronous disk cleanup.
+// Cache retention policies remain unchanged; only their startup execution is deferred.
+function scheduleWindowsStartupCacheCleanup() {
+  const delayMs = 90000;
+  setTimeout(() => {
+    if (isQuitting) {
+      return;
+    }
+    samStartupTrace('cache_cleanup_begin');
+    const beganAt = process.hrtime.bigint();
+    try {
+      const result = cleanupCachesBySettings();
+      const durationMs = (Number(process.hrtime.bigint() - beganAt) / 1e6).toFixed(1);
+      samStartupTrace('cache_cleanup_finished', `duration_ms=${durationMs} deleted_files=${result.deletedFiles}`);
+    } catch (error) {
+      electronLog.warn('Deferred Windows startup cache cleanup failed:', error);
+    }
+  }, delayMs);
+}
+
 app.whenReady().then(() => {
+  samStartupTrace('electron_ready');
   ensureAutoLaunchBySettings();
+  samStartupTrace('auto_launch_checked');
     app.setName(APP_NAME);
 
     loadSettings();
-    cleanupCachesBySettings();
+    if (process.platform !== 'win32') {
+      cleanupCachesBySettings();
+    }
+    samStartupTrace('settings_loaded');
     configureSession();
+    samStartupTrace('session_configured');
     registerSettingsIpcHandlers();
     registerMessageCopyIpcHandlers();
   registerNotesIpcHandlers();
@@ -2845,8 +2896,14 @@ app.whenReady().then(() => {
     createAppMenu();
   ensureStandardEditMenuForClipboard();
     createTray();
+    samStartupTrace('tray_created');
     createMainWindow();
+    samStartupTrace('window_created');
+    if (process.platform === 'win32') {
+      scheduleWindowsStartupCacheCleanup();
+    }
     setupAutoUpdater();
+    samStartupTrace('startup_bootstrap_finished');
   }).catch((error) => {
     dialog.showErrorBox('Помилка ініціалізації', String(error));
   });
