@@ -3827,6 +3827,15 @@ function samStartChatRowsSpacingV3() {
   setTimeout(run, 1000);
   setTimeout(run, 2500);
 
+  // Windows: this routine only removes legacy CSS row translations;
+  // this version no longer applies them. Keep initial/focus cleanup,
+  // but avoid a permanent full-page observer and 2-second row scans.
+  // macOS/Linux retain their existing behavior until tested separately.
+  if (typeof process !== 'undefined' && process.platform === 'win32') {
+    window.addEventListener('focus', run);
+    return;
+  }
+
   window.addEventListener('resize', run);
   window.addEventListener('focus', run);
   document.addEventListener('scroll', run, true);
@@ -3900,6 +3909,22 @@ function samEnsureReactionPreviewEmojiSizeStyle() {
   samSafeAppendStyleElement(style);
 }
 
+// Windows: avoid repeating identical emoji style writes.
+function samSetImportantEmojiInlineStyleIfChanged(element, property, value) {
+  const style = element && element.style;
+  if (!style) return;
+
+  if (typeof process !== 'undefined' && process.platform === 'win32' &&
+      style.getPropertyPriority(property) === 'important') {
+    const currentValue = style.getPropertyValue(property);
+    if (currentValue === value || (value === '0' && currentValue === '0px')) {
+      return;
+    }
+  }
+
+  style.setProperty(property, value, 'important');
+}
+
 function samFixReactionPreviewEmojiSizesOnce() {
   samEnsureReactionPreviewEmojiSizeStyle();
 
@@ -3912,18 +3937,18 @@ function samFixReactionPreviewEmojiSizesOnce() {
     const emojis = Array.from(root.querySelectorAll('img.emoji'));
 
     for (const emoji of emojis) {
-      emoji.style.setProperty('width', '20px', 'important');
-      emoji.style.setProperty('height', '20px', 'important');
-      emoji.style.setProperty('min-width', '20px', 'important');
-      emoji.style.setProperty('min-height', '20px', 'important');
-      emoji.style.setProperty('max-width', '20px', 'important');
-      emoji.style.setProperty('max-height', '20px', 'important');
-      emoji.style.setProperty('display', 'inline-block', 'important');
-      emoji.style.setProperty('object-fit', 'initial', 'important');
-      emoji.style.setProperty('border-radius', '0', 'important');
-      emoji.style.setProperty('transform', 'none', 'important');
-      emoji.style.setProperty('vertical-align', '-4px', 'important');
-      emoji.style.setProperty('overflow', 'hidden', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'width', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'height', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'min-width', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'min-height', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'max-width', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'max-height', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'display', 'inline-block', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'object-fit', 'initial', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'border-radius', '0', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'transform', 'none', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'vertical-align', '-4px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'overflow', 'hidden', 'important');
     }
   }
 }
@@ -4034,30 +4059,30 @@ function samFixAllChatListEmojiSizesOnce() {
     const emojis = Array.from(root.querySelectorAll('img.emoji'));
 
     for (const emoji of emojis) {
-      emoji.style.setProperty('width', '20px', 'important');
-      emoji.style.setProperty('height', '20px', 'important');
-      emoji.style.setProperty('min-width', '20px', 'important');
-      emoji.style.setProperty('min-height', '20px', 'important');
-      emoji.style.setProperty('max-width', '20px', 'important');
-      emoji.style.setProperty('max-height', '20px', 'important');
-      emoji.style.setProperty('display', 'inline-block', 'important');
-      emoji.style.setProperty('object-fit', 'initial', 'important');
-      emoji.style.setProperty('border-radius', '0', 'important');
-      emoji.style.setProperty('transform', 'none', 'important');
-      emoji.style.setProperty('vertical-align', '-4px', 'important');
-      emoji.style.setProperty('overflow', 'hidden', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'width', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'height', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'min-width', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'min-height', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'max-width', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'max-height', '20px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'display', 'inline-block', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'object-fit', 'initial', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'border-radius', '0', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'transform', 'none', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'vertical-align', '-4px', 'important');
+      samSetImportantEmojiInlineStyleIfChanged(emoji, 'overflow', 'hidden', 'important');
 
       const parent = emoji.parentElement;
 
       if (parent && parent.style) {
-        parent.style.setProperty('width', 'auto', 'important');
-        parent.style.setProperty('min-width', '0', 'important');
-        parent.style.setProperty('max-width', 'none', 'important');
-        parent.style.setProperty('height', '20px', 'important');
-        parent.style.setProperty('min-height', '20px', 'important');
-        parent.style.setProperty('max-height', '20px', 'important');
-        parent.style.setProperty('overflow', 'visible', 'important');
-        parent.style.setProperty('line-height', '20px', 'important');
+        samSetImportantEmojiInlineStyleIfChanged(parent, 'width', 'auto', 'important');
+        samSetImportantEmojiInlineStyleIfChanged(parent, 'min-width', '0', 'important');
+        samSetImportantEmojiInlineStyleIfChanged(parent, 'max-width', 'none', 'important');
+        samSetImportantEmojiInlineStyleIfChanged(parent, 'height', '20px', 'important');
+        samSetImportantEmojiInlineStyleIfChanged(parent, 'min-height', '20px', 'important');
+        samSetImportantEmojiInlineStyleIfChanged(parent, 'max-height', '20px', 'important');
+        samSetImportantEmojiInlineStyleIfChanged(parent, 'overflow', 'visible', 'important');
+        samSetImportantEmojiInlineStyleIfChanged(parent, 'line-height', '20px', 'important');
       }
     }
   }
@@ -4675,6 +4700,7 @@ function samNotesEnsurePanel() {
   }
 
   let panel = document.getElementById('samMiniNotesPanel');
+  const samNotesPanelAlreadyExists = Boolean(panel);
 
   if (!panel) {
     panel = document.createElement('div');
@@ -4752,7 +4778,10 @@ function samNotesEnsurePanel() {
     document.body.appendChild(panel);
   }
 
-  samNotesRenderList();
+  // Windows: do not rebuild unchanged notes every two seconds.
+  if (process.platform !== 'win32' || !samNotesPanelAlreadyExists) {
+    samNotesRenderList();
+  }
 }
 
 function samStartMiniNotesPanel() {
@@ -7689,14 +7718,44 @@ function samDndExperimentChatState() {
   };
 }
 
+// Distinguish title/identity changes from unrelated header status updates.
+// An actual chat switch must still fail closed, including for plain files.
+function samDndExperimentMutationTouchesChatIdentity(chat, mutation) {
+  if (!chat || !chat.titled || !mutation) return true;
+
+  if (mutation.type === 'attributes') {
+    return mutation.target === chat.titled && mutation.attributeName === 'title';
+  }
+  if (mutation.type === 'characterData') {
+    return chat.titled.contains(mutation.target);
+  }
+  if (mutation.type === 'childList') {
+    return Array.from(mutation.removedNodes || []).some((node) =>
+      node === chat.titled ||
+      (node && typeof node.contains === 'function' && node.contains(chat.titled))
+    );
+  }
+  return true;
+}
+
+function samDndExperimentRecordChatMutations(chat, mutations) {
+  if (!mutations || !mutations.length) return;
+  // Preserve original strict rejection for encrypted files.
+  chat.invalidated = true;
+  if (Array.from(mutations).some((mutation) =>
+    samDndExperimentMutationTouchesChatIdentity(chat, mutation))) {
+    chat.identityInvalidated = true;
+  }
+}
+
 function samDndExperimentWatchChat(chat) {
   if (!chat || !chat.main || !chat.header || !chat.titled ||
       !chat.title || !chat.header.isConnected) {
     return false;
   }
   try {
-    const watcher = new MutationObserver(() => {
-      chat.invalidated = true;
+    const watcher = new MutationObserver((mutations) => {
+      samDndExperimentRecordChatMutations(chat, mutations);
     });
     watcher.observe(chat.header, {
       subtree: true,
@@ -7719,13 +7778,16 @@ function samDndExperimentStopWatchChat(chat) {
   }
 }
 
-function samDndExperimentSameChat(before) {
+function samDndExperimentSameChat(before, allowCosmeticHeaderMutations = false) {
   if (!before) return false;
   // MutationObserver callbacks are asynchronous; consume queued changes now.
-  if (before.watcher && before.watcher.takeRecords().length) {
-    before.invalidated = true;
+  if (before.watcher) {
+    samDndExperimentRecordChatMutations(before, before.watcher.takeRecords());
   }
-  if (before.invalidated) return false;
+  if (before.identityInvalidated) return false;
+  // Only explicitly unencrypted files tolerate harmless header updates.
+  // Encrypted files retain the previous strict any-mutation rule.
+  if (before.invalidated && !allowCosmeticHeaderMutations) return false;
   const after = samDndExperimentChatState();
   return Boolean(before.main && before.header && before.header.isConnected &&
     before.titled && before.titled.isConnected && before.title &&
@@ -7733,8 +7795,8 @@ function samDndExperimentSameChat(before) {
     before.titled === after.titled && before.title === after.title);
 }
 
-function samDndExperimentDispatchOnce(files, target, chat) {
-  if (!samDndExperimentSameChat(chat)) {
+function samDndExperimentDispatchOnce(files, target, chat, allowCosmeticHeaderMutations = false) {
+  if (!samDndExperimentSameChat(chat, allowCosmeticHeaderMutations)) {
     throw new Error('Чат змінився або його не вдалося надійно визначити. Прикріпи файл вручну.');
   }
   if (!target || !target.isConnected || typeof target.dispatchEvent !== 'function') {
@@ -7903,7 +7965,9 @@ async function samDndExperimentOnDrop(event) {
       throw new Error('Понад 10 файлів. Прикріпи їх вручну.');
     }
     if (choice === 'plain') {
-      samDndExperimentDispatchOnce(files, originalTarget, chat);
+      // A presence/status update must not block a still-identifiable chat.
+      // WhatsApp preview and the final Send action remain manual.
+      samDndExperimentDispatchOnce(files, originalTarget, chat, true);
       return;
     }
     if (choice === 'encrypt') {
@@ -8323,6 +8387,12 @@ function samEnsureChatListReactionPreviewFix() {
     return;
   }
 
+  // Several startup timers call this function. Initialize the watcher once.
+  if (window.__samChatListReactionPreviewFixStarted) {
+    return;
+  }
+  window.__samChatListReactionPreviewFixStarted = true;
+
   if (!document.getElementById('samChatListReactionPreviewFixStyle')) {
     const style = document.createElement('style');
     style.id = 'samChatListReactionPreviewFixStyle';
@@ -8433,8 +8503,19 @@ function samEnsureChatListReactionPreviewFix() {
     return '👍';
   };
 
+  // Avoid writing attributes if unchanged: this observer watches DOM changes.
+  // Rewriting the same values can cause a feedback loop of full chat-list scans.
+  const setAttributeIfChanged = (element, name, value) => {
+    const nextValue = String(value);
+    if (element.getAttribute(name) !== nextValue) {
+      element.setAttribute(name, nextValue);
+    }
+  };
+
   const clearRow = (row) => {
-    row.removeAttribute('data-sam-reaction-preview-row');
+    if (row.hasAttribute('data-sam-reaction-preview-row')) {
+      row.removeAttribute('data-sam-reaction-preview-row');
+    }
 
     const marked = row.querySelectorAll('[data-sam-reaction-status="1"]');
 
@@ -8505,7 +8586,7 @@ function samEnsureChatListReactionPreviewFix() {
           continue;
         }
 
-        row.setAttribute('data-sam-reaction-preview-row', '1');
+        setAttributeIfChanged(row, 'data-sam-reaction-preview-row', '1');
 
         const status = findReactionStatusElement(row);
 
@@ -8517,9 +8598,9 @@ function samEnsureChatListReactionPreviewFix() {
           .replace(/\s+/g, ' ')
           .trim();
 
-        status.setAttribute('data-sam-reaction-status', '1');
-        status.setAttribute('data-sam-reaction-emoji', extractEmoji(row, status));
-        status.setAttribute('title', rawPreview || 'Реакція на повідомлення');
+        setAttributeIfChanged(status, 'data-sam-reaction-status', '1');
+        setAttributeIfChanged(status, 'data-sam-reaction-emoji', extractEmoji(row, status));
+        setAttributeIfChanged(status, 'title', rawPreview || 'Реакція на повідомлення');
       }
     }
   };
@@ -8532,11 +8613,13 @@ function samEnsureChatListReactionPreviewFix() {
     }
 
     scheduled = true;
-
-    window.requestAnimationFrame(() => {
-      scheduled = false;
-      markRows();
-    });
+    // Coalesce busy WhatsApp DOM updates instead of rescanning on every frame.
+    window.setTimeout(() => {
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+        markRows();
+      });
+    }, 200);
   };
 
   markRows();
@@ -8548,14 +8631,17 @@ function samEnsureChatListReactionPreviewFix() {
       subtree: true,
       childList: true,
       characterData: true,
-      attributes: true
+      attributes: true,
+      // Don't react to our own data-sam-reaction-* attribute updates.
+      attributeFilter: ['class', 'data-testid', 'role', 'alt', 'aria-label', 'title']
     });
 
     window.__samChatListReactionPreviewFixObserver = observer;
   }
 
   if (!window.__samChatListReactionPreviewFixInterval) {
-    window.__samChatListReactionPreviewFixInterval = window.setInterval(markRows, 700);
+    // Safety rescan if WhatsApp mounts/replaces the virtualized chat list.
+    window.__samChatListReactionPreviewFixInterval = window.setInterval(scheduleMarkRows, 2500);
   }
 }
 
