@@ -2557,9 +2557,49 @@ function createMainWindow() {
     }
   });
 
+  mainWindow.webContents.once('dom-ready', () => {
+    samStartupTrace('whatsapp_dom_ready');
+  });
+
   mainWindow.webContents.once('did-finish-load', () => {
     // Document-load completion is not necessarily the moment chats become usable.
     samStartupTrace('whatsapp_document_loaded');
+
+    // Diagnostic only: measure DOM chat-row appearance, not chat content.
+    // Does not run for normal users and does not change WhatsApp behavior.
+    if (SAM_STARTUP_TRACE && mainWindow && !mainWindow.isDestroyed()) {
+      const contents = mainWindow.webContents;
+      contents.executeJavaScript(`
+        new Promise(resolve => {
+          const begin = performance.now();
+          let checks = 0;
+          let sidebarSeen = false;
+          const tick = () => {
+            checks += 1;
+            const pane = document.querySelector('#pane-side');
+            sidebarSeen = sidebarSeen || Boolean(pane);
+            const chatRow = pane && pane.querySelector(
+              '[role="row"], [data-testid^="list-item-"], [data-testid="cell-frame-container"]'
+            );
+            if (chatRow || checks >= 120) {
+              clearInterval(interval);
+              resolve({
+                found: Boolean(chatRow),
+                sidebar: sidebarSeen,
+                elapsedMs: Math.round(performance.now() - begin)
+              });
+            }
+          };
+          const interval = setInterval(tick, 500);
+          tick();
+        })
+      `, true).then((result) => {
+        const stage = result.found ? 'whatsapp_first_chat_row' : 'whatsapp_chat_row_timeout';
+        samStartupTrace(stage, `wait_ms=${result.elapsedMs} sidebar=${result.sidebar ? 1 : 0}`);
+      }).catch(() => {
+        samStartupTrace('whatsapp_chat_row_probe_unavailable');
+      });
+    }
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
