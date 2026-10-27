@@ -5,6 +5,8 @@ const {
   Tray,
   shell,
   session,
+  desktopCapturer,
+  systemPreferences,
   nativeImage,
   dialog,
   ipcMain,
@@ -2072,6 +2074,15 @@ async function showDownloadActions(filePath) {
   }
 }
 
+// SAM_SCREEN_SHARE_V1: never grant screen capture outside WhatsApp Web.
+function samIsTrustedScreenShareOrigin(origin) {
+  try {
+    return new URL(origin).origin === 'https://web.whatsapp.com';
+  } catch (_error) {
+    return false;
+  }
+}
+
 function configureSession() {
   const waSession = session.fromPartition(SESSION_PARTITION, { cache: true });
 
@@ -2082,6 +2093,11 @@ function configureSession() {
 
   waSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const requestingUrl = details && details.requestingUrl ? details.requestingUrl : webContents.getURL();
+
+    if (permission === 'display-capture') {
+      callback(samIsTrustedScreenShareOrigin(requestingUrl));
+      return;
+    }
 
     const allowedPermissions = new Set([
       'media',
@@ -2101,6 +2117,10 @@ function configureSession() {
   });
 
   waSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+    if (permission === 'display-capture') {
+      return samIsTrustedScreenShareOrigin(requestingOrigin);
+    }
+
     const allowedPermissions = new Set([
       'media',
       'microphone',
@@ -2115,6 +2135,90 @@ function configureSession() {
       allowedPermissions.has(permission) &&
       isTrustedWhatsAppPermissionOrigin(requestingOrigin)
     );
+  });
+
+  // The WhatsApp call UI uses getDisplayMedia(). Electron needs an explicit
+  // display-media handler. Ask the user to select the source every time.
+  waSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    if (!samIsTrustedScreenShareOrigin(request && request.securityOrigin)) {
+      electronLog.warn('[SAM_SCREEN_SHARE] blocked_untrusted_origin');
+      callback(null);
+      return;
+    }
+
+    electronLog.info('[SAM_SCREEN_SHARE] requested');
+
+    try {
+      if (process.platform === 'darwin') {
+        const status = systemPreferences.getMediaAccessStatus('screen');
+        if (status === 'denied' || status === 'restricted') {
+          electronLog.warn('[SAM_SCREEN_SHARE] mac_screen_recording_denied');
+          await dialog.showMessageBox({
+            type: 'warning',
+            title: 'SAM WhatsApp Web — демонстрація екрана',
+            message: 'macOS не надала доступ до запису екрана.',
+            detail: 'Відкрийте Системні параметри → Конфіденційність і безпека → Запис екрана й системного аудіо, дозвольте SAM WhatsApp Web і повністю перезапустіть програму.',
+            buttons: ['OK']
+          });
+          callback(null);
+          return;
+        }
+      }
+
+      // Do not generate image thumbnails or transmit window titles to logs.
+      const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 0, height: 0 },
+        fetchWindowIcons: false
+      });
+      const candidates = sources.filter(source =>
+        source && typeof source.id === 'string' &&
+        (source.id.startsWith('screen:') || source.id.startsWith('window:'))
+      ).slice(0, 20);
+
+      if (!candidates.length) {
+        electronLog.warn('[SAM_SCREEN_SHARE] no_sources');
+        callback(null);
+        return;
+      }
+
+      const buttons = ['Скасувати', ...candidates.map((source, i) => {
+        const kind = source.id.startsWith('screen:') ? 'Екран' : 'Вікно';
+        const name = String(source.name || 'Без назви').replace(/[\r\n]+/g, ' ').slice(0, 65);
+        return `${i + 1}. ${kind}: ${name}`;
+      })];
+      const options = {
+        type: 'question',
+        title: 'SAM WhatsApp Web — демонстрація екрана',
+        message: 'Оберіть, що показувати співрозмовнику',
+        detail: 'Передача екрана почнеться тільки після вашого вибору.',
+        buttons,
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true
+      };
+      const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+      const selection = owner
+        ? await dialog.showMessageBox(owner, options)
+        : await dialog.showMessageBox(options);
+
+      const index = selection.response - 1;
+      if (index < 0 || index >= candidates.length ||
+          !mainWindow || mainWindow.isDestroyed() ||
+          !samIsTrustedScreenShareOrigin(mainWindow.webContents.getURL())) {
+        electronLog.info('[SAM_SCREEN_SHARE] canceled');
+        callback(null);
+        return;
+      }
+
+      // Only the explicitly chosen video source. Do not capture system audio
+      // or silently select the first screen.
+      callback({ video: candidates[index] });
+      electronLog.info('[SAM_SCREEN_SHARE] source_selected');
+    } catch (error) {
+      electronLog.error('[SAM_SCREEN_SHARE] failed:', error && error.message ? error.message : String(error));
+      callback(null);
+    }
   });
 
   waSession.on('will-download', (event, item) => {
